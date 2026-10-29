@@ -1,6 +1,6 @@
 cask "term-lab" do
-  version "0.2.1" # x-release-please-version
-  sha256 "5a1e811924cca5886fbe895b0326d42cae18bd51c07c13e515800768f2a8dfba"
+  version "0.2.0" # x-release-please-version
+  sha256 "a6b61f89c77cabdb8d904cd01d1f4082be540484e66be4589060425488759c19"
 
   url "https://github.com/matheusmntt/term-lab/releases/download/v#{version}/Term.Lab_#{version}_universal.dmg"
   name "Term Lab"
