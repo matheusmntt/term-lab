@@ -1,13 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+mod menu;
+mod shells;
+
+use portable_pty::{native_pty_system, MasterPty, PtySize};
 use serde_json::json;
 use std::{
     collections::HashMap,
-    fs,
     io::{Read, Write},
-    path::PathBuf,
-    sync::{Mutex, OnceLock},
+    sync::Mutex,
     thread,
 };
 use tauri::{AppHandle, Emitter, State};
@@ -25,55 +26,6 @@ fn size(cols: u16, rows: u16) -> PtySize {
     PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }
 }
 
-// Integração com o zsh: um ZDOTDIR temporário carrega os dotfiles do usuário e,
-// no fim do .zshrc, registra hooks que emitem sequências OSC:
-//   OSC 133;C        -> comando começou a executar
-//   OSC 133;D;<code> -> comando terminou (com exit code)
-//   OSC 7            -> diretório atual
-const ZSHENV: &str = r#"__tl_ours="$ZDOTDIR"
-ZDOTDIR="$TERMLAB_USER_ZDOTDIR"
-[[ -f "$ZDOTDIR/.zshenv" ]] && source "$ZDOTDIR/.zshenv"
-ZDOTDIR="$__tl_ours"
-unset __tl_ours
-"#;
-
-const ZPROFILE: &str = r#"__tl_ours="$ZDOTDIR"
-ZDOTDIR="$TERMLAB_USER_ZDOTDIR"
-[[ -f "$ZDOTDIR/.zprofile" ]] && source "$ZDOTDIR/.zprofile"
-ZDOTDIR="$__tl_ours"
-unset __tl_ours
-"#;
-
-const ZSHRC: &str = r#"ZDOTDIR="$TERMLAB_USER_ZDOTDIR"
-[[ -f "$ZDOTDIR/.zshrc" ]] && source "$ZDOTDIR/.zshrc"
-
-__termlab_preexec() { printf '\e]133;C\a' }
-__termlab_precmd() {
-  local c=$?
-  printf '\e]133;D;%s\a' "$c"
-  printf '\e]7;file://%s%s\a' "$HOST" "${PWD// /%20}"
-}
-autoload -Uz add-zsh-hook
-add-zsh-hook preexec __termlab_preexec
-add-zsh-hook precmd __termlab_precmd
-precmd_functions=(__termlab_precmd ${precmd_functions:#__termlab_precmd})
-"#;
-
-static ZSH_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
-
-fn zsh_integration_dir() -> Option<PathBuf> {
-    ZSH_DIR
-        .get_or_init(|| {
-            let dir = std::env::temp_dir().join("termlab-zsh");
-            fs::create_dir_all(&dir).ok()?;
-            for (name, body) in [(".zshenv", ZSHENV), (".zprofile", ZPROFILE), (".zshrc", ZSHRC)] {
-                fs::write(dir.join(name), body).ok()?;
-            }
-            Some(dir)
-        })
-        .clone()
-}
-
 #[tauri::command]
 fn pty_spawn(
     app: AppHandle,
@@ -82,32 +34,10 @@ fn pty_spawn(
     cols: u16,
     rows: u16,
     cwd: Option<String>,
+    shell: Option<String>,
 ) -> Result<(), String> {
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
-
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let is_zsh = shell.ends_with("zsh");
-    let mut cmd = CommandBuilder::new(shell);
-    cmd.arg("-l");
-    cmd.env("TERM", "xterm-256color");
-
-    if is_zsh {
-        if let Some(dir) = zsh_integration_dir() {
-            let user_zdotdir = std::env::var("ZDOTDIR")
-                .or_else(|_| std::env::var("HOME"))
-                .unwrap_or_default();
-            cmd.env("TERMLAB_USER_ZDOTDIR", user_zdotdir);
-            cmd.env("ZDOTDIR", dir);
-        }
-    }
-
-    let start_dir = cwd
-        .map(PathBuf::from)
-        .filter(|p| p.is_dir())
-        .or_else(|| std::env::var_os("HOME").map(PathBuf::from));
-    if let Some(dir) = start_dir {
-        cmd.cwd(dir);
-    }
+    let cmd = shells::build_shell_command(shell, cwd);
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     drop(pair.slave);
@@ -172,6 +102,10 @@ fn set_dock_icon() {
 
 fn main() {
     tauri::Builder::default()
+        .menu(|app| menu::build_menu(app))
+        .on_menu_event(|app, event| {
+            let _ = app.emit("menu-action", event.id().as_ref());
+        })
         .setup(|_app| {
             #[cfg(target_os = "macos")]
             set_dock_icon();
