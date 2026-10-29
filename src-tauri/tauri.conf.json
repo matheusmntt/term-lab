@@ -13,7 +13,9 @@
     "windows": [
       { "title": "Term Lab", "width": 1100, "height": 700, "titleBarStyle": "Overlay", "hiddenTitle": true }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://github.com https://*.githubusercontent.com; object-src 'none'; base-uri 'self'"
+    }
   },
   "bundle": {
     "active": true,
