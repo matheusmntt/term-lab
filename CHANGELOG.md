@@ -2,6 +2,13 @@
 
 Todas as mudanças relevantes deste projeto são documentadas neste arquivo, geradas automaticamente a partir de _Conventional Commits_.
 
+## [0.2.1](https://github.com/matheusmntt/term-lab/compare/v0.2.0...v0.2.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **ci:** only export Apple signing env vars when secrets are configured ([4cbac26](https://github.com/matheusmntt/term-lab/commit/4cbac2621ce819a5cefbc21812f60e77a96aaa66))
+
 ## [0.2.0](https://github.com/matheusmntt/term-lab/compare/v0.1.0...v0.2.0) (2026-10-29)
 
 
