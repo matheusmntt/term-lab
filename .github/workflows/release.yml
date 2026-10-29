@@ -1,0 +1,119 @@
+name: Release macOS & Homebrew Cask
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag da release (ex.: v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    name: Build Universal macOS & Update Homebrew Cask
+    runs-on: macos-latest
+    steps:
+      - name: Resolve release tag
+        id: meta
+        run: |
+          TAG="${{ inputs.tag_name || github.ref_name }}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install frontend dependencies & validate
+        run: |
+          npm ci
+          npx tsc
+          npm test
+
+      - name: Configure Tauri build arguments
+        id: tauri-args
+        env:
+          HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_UPDATER_KEY" = "true" ]; then
+            echo "args=--target universal-apple-darwin" >> "$GITHUB_OUTPUT"
+          else
+            echo 'args=--target universal-apple-darwin --config {"bundle":{"createUpdaterArtifacts":false}}' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ steps.meta.outputs.tag }}
+          releaseName: "Term Lab v__VERSION__"
+          releaseBody: "Instale via Homebrew:\n```bash\nbrew tap matheusmntt/term-lab https://github.com/matheusmntt/term-lab.git\nbrew install --cask matheusmntt/term-lab/term-lab\n```"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ steps.tauri-args.outputs.args }}
+
+      - name: Update Homebrew Cask (Casks/term-lab.rb)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          DMG_PATH=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -n 1)
+          SHA256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+          DMG_URL=$(gh release view "$TAG" --json assets --jq '.assets[] | select(.name | endswith(".dmg")) | .url' | head -n 1)
+
+          git fetch origin main
+          git checkout -B main origin/main
+
+          VERSION="$VERSION" SHA256="$SHA256" DMG_URL="$DMG_URL" node -e '
+            const fs = require("node:fs");
+            const path = "Casks/term-lab.rb";
+            let rb = fs.readFileSync(path, "utf8");
+            rb = rb.replace(/^(\s*version\s+")[^"]+(")/m, `$1${process.env.VERSION}$2`);
+            rb = rb.replace(/^(\s*sha256\s+).*/m, `$1"${process.env.SHA256}"`);
+            if (process.env.DMG_URL) {
+              const templated = process.env.DMG_URL.replaceAll(process.env.VERSION, "#{version}");
+              rb = rb.replace(/^(\s*url\s+")[^"]+(")/m, `$1${templated}$2`);
+            }
+            fs.writeFileSync(path, rb);
+          '
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/term-lab.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(homebrew): update cask to ${TAG} [skip ci]"
+            git push origin main
+          fi
