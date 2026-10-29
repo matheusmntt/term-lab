@@ -101,6 +101,8 @@ function installMock(scripts) {
     },
   };
   localStorage.removeItem("term-lab.groups");
+  localStorage.removeItem("term-lab.session");
+  localStorage.removeItem("term-lab.preferences");
 }
 
 // ---------- execução ----------

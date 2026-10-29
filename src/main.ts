@@ -11,6 +11,11 @@ import {
   leaves, without, insertBeside, swapLeaves, serialize, hydrate,
 } from "./layout";
 import { type Group, loadGroups, saveGroup, deleteGroup } from "./groups";
+import {
+  type CursorStyle, type Preferences,
+  DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences,
+} from "./preferences";
+import { clearSession, loadSession, saveSession } from "./session";
 
 type Status = "idle" | "running" | "error";
 
@@ -19,6 +24,7 @@ interface Pane {
   tab: Tab;
   term: Terminal;
   fit: FitAddon;
+  search: SearchAddon;
   el: HTMLElement;
   host: HTMLElement;
   titleEl: HTMLElement;
@@ -41,16 +47,43 @@ const groupsEl = $("groups");
 const panesEl = $("panes");
 const titleEl = $("title");
 const themeSel = $<HTMLSelectElement>("theme");
+const searchBar = $("search-bar");
+const searchInput = $<HTMLInputElement>("search-input");
 
 const tabs: Tab[] = [];
 const ptys = new Map<number, Pane>();
 let active: Tab | null = null;
 let focused: Pane | null = null;
 let nextId = 1;
+let booting = true;
+let prefs = loadPreferences();
 let theme = themes[localStorage.getItem("theme") ?? "Catppuccin Mocha"] ?? themes["Catppuccin Mocha"];
+let checkUpdatesHandler: (() => void) | null = null;
+
+export function registerUpdateChecker(fn: () => void) {
+  checkUpdatesHandler = fn;
+}
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const basename = (p: string) => p.replace(/\/+$/, "").split("/").pop() || "/";
+
+// ---------- Persistência de sessão ----------
+function persistSession() {
+  if (booting) return;
+  if (!prefs.restoreSession) {
+    clearSession();
+    return;
+  }
+  const openTabs = tabs.filter((t) => t.root !== null);
+  saveSession({
+    activeIndex: Math.max(0, active ? openTabs.indexOf(active) : 0),
+    tabs: openTabs.map((t) => ({
+      title: t.title,
+      custom: t.custom,
+      layout: serialize(t.root!, (p) => p.cwd),
+    })),
+  });
+}
 
 // ---------- Temas ----------
 for (const name of Object.keys(themes)) themeSel.add(new Option(name, name));
@@ -70,6 +103,7 @@ listen<{ id: number }>("pty-exit", (e) => {
   const p = ptys.get(e.payload.id);
   if (p) closePane(p);
 });
+listen<string>("menu-action", (e) => runAction(e.payload));
 
 // ---------- Status (bolinha) ----------
 function setStatus(p: Pane, s: Status) {
@@ -121,19 +155,22 @@ function createPane(tab: Tab, cwd = ""): Pane {
   const titleSpan = el.querySelector(".pane-title") as HTMLElement;
 
   const term = new Terminal({
-    fontFamily: "Menlo, 'JetBrains Mono', monospace",
-    fontSize: 13,
-    cursorBlink: true,
+    fontFamily: prefs.fontFamily,
+    fontSize: prefs.fontSize,
+    cursorStyle: prefs.cursorStyle,
+    cursorBlink: prefs.cursorBlink,
+    scrollback: prefs.scrollback,
     allowProposedApi: true,
     minimumContrastRatio: 4, // garante legibilidade de textos apagados (ex.: autosuggestions)
     theme,
   });
   const fit = new FitAddon();
+  const search = new SearchAddon();
   term.loadAddon(fit);
   term.loadAddon(new WebLinksAddon());
-  term.loadAddon(new SearchAddon());
+  term.loadAddon(search);
 
-  const pane: Pane = { id, tab, term, fit, el, host, titleEl: titleSpan, cwd, status: "idle" };
+  const pane: Pane = { id, tab, term, fit, search, el, host, titleEl: titleSpan, cwd, status: "idle" };
   if (cwd) titleSpan.textContent = basename(cwd);
   ptys.set(id, pane);
 
@@ -155,6 +192,7 @@ function createPane(tab: Tab, cwd = ""): Pane {
       pane.cwd = decodeURIComponent(new URL(data).pathname);
       titleSpan.textContent = basename(pane.cwd);
       refreshTab(pane.tab);
+      persistSession();
     } catch { /* ignora */ }
     return true;
   });
@@ -176,7 +214,13 @@ async function launch(p: Pane) {
   fitPane(p);
   p.ro = new ResizeObserver(() => fitPane(p));
   p.ro.observe(p.host);
-  await invoke("pty_spawn", { id: p.id, cols: p.term.cols, rows: p.term.rows, cwd: p.cwd || null });
+  await invoke("pty_spawn", {
+    id: p.id,
+    cols: p.term.cols,
+    rows: p.term.rows,
+    cwd: p.cwd || null,
+    shell: prefs.shell || null,
+  });
 }
 
 function fitPane(p: Pane) {
@@ -187,8 +231,45 @@ function focus(p: Pane) {
   focused?.el.classList.remove("focus");
   focused = p;
   p.el.classList.add("focus");
-  p.term.focus();
+  if (document.activeElement !== searchInput) p.term.focus();
 }
+
+// ---------- Busca (⌘F) ----------
+function openSearch() {
+  searchBar.hidden = false;
+  const sel = focused?.term.getSelection();
+  if (sel) searchInput.value = sel;
+  searchInput.focus();
+  searchInput.select();
+  if (searchInput.value) focused?.search.findNext(searchInput.value);
+}
+
+function closeSearch() {
+  if (searchBar.hidden) return;
+  searchBar.hidden = true;
+  for (const p of ptys.values()) p.search.clearDecorations();
+  focused?.term.focus();
+}
+
+searchInput.addEventListener("input", () => {
+  if (searchInput.value) focused?.search.findNext(searchInput.value, { incremental: true });
+  else focused?.search.clearDecorations();
+});
+searchInput.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeSearch();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (!searchInput.value) return;
+    if (e.shiftKey) focused?.search.findPrevious(searchInput.value);
+    else focused?.search.findNext(searchInput.value);
+  }
+});
+$("search-prev").onclick = () => searchInput.value && focused?.search.findPrevious(searchInput.value);
+$("search-next").onclick = () => searchInput.value && focused?.search.findNext(searchInput.value);
+$("search-close").onclick = closeSearch;
 
 // ---------- Layout (render, divisores, drag & drop) ----------
 function render(tab: Tab) {
@@ -233,7 +314,11 @@ function makeDivider(n: Extract<Node<Pane>, { kind: "split" }>, i: number, conta
       cells[i - 1].style.flex = `${n.sizes[i - 1]} 1 0`;
       cells[i].style.flex = `${n.sizes[i]} 1 0`;
     };
-    d.onpointerup = () => { d.onpointermove = null; d.onpointerup = null; };
+    d.onpointerup = () => {
+      d.onpointermove = null;
+      d.onpointerup = null;
+      persistSession();
+    };
   };
   return d;
 }
@@ -294,6 +379,7 @@ function movePane(p: Pane, target: Pane, side: Side | "center") {
   else tab.root = insertBeside(without(tab.root, p)!, target, p, side);
   render(tab);
   focus(p);
+  persistSession();
 }
 
 async function split(dir: "right" | "down", target: Pane | null = focused) {
@@ -304,6 +390,7 @@ async function split(dir: "right" | "down", target: Pane | null = focused) {
   render(tab);
   await launch(np);
   focus(np);
+  persistSession();
 }
 
 function destroyPane(p: Pane) {
@@ -323,6 +410,7 @@ function closePane(p: Pane) {
   if (!tab.root) return closeTab(tab);
   render(tab);
   if (!focused) focus(leaves(tab.root)[0]);
+  persistSession();
 }
 
 // ---------- Abas ----------
@@ -353,6 +441,7 @@ async function newTab(o: NewTabOpts = {}): Promise<Tab> {
   const ps = leaves(tab.root);
   for (const p of ps) await launch(p);
   if (tab === active) focus(ps[0]);
+  persistSession();
   return tab;
 }
 
@@ -363,10 +452,11 @@ function select(tab: Tab) {
     t.view.classList.toggle("active", t === tab);
     t.tabEl.classList.toggle("active", t === tab);
   }
+  persistSession();
   requestAnimationFrame(() => {
     const ps = leaves(tab.root);
     ps.forEach(fitPane);
-    // não rouba o foco de um campo de texto ativo (ex.: renomear aba)
+    // não rouba o foco de um campo de texto ativo (ex.: renomear aba ou busca)
     if (ps.length && !(document.activeElement instanceof HTMLInputElement)) {
       focus(focused && ps.includes(focused) ? focused : ps[0]);
     }
@@ -379,8 +469,11 @@ function closeTab(tab: Tab) {
   tab.view.remove();
   tab.tabEl.remove();
   tabs.splice(tabs.indexOf(tab), 1);
-  if (tabs.length === 0) newTab();
-  else if (active === tab) select(tabs[tabs.length - 1]);
+  if (tabs.length === 0) void newTab();
+  else {
+    if (active === tab) select(tabs[tabs.length - 1]);
+    else persistSession();
+  }
 }
 
 function startRename(tab: Tab) {
@@ -402,6 +495,7 @@ function startRename(tab: Tab) {
     }
     input.replaceWith(t);
     refreshTab(tab);
+    persistSession();
     focused?.term.focus();
   };
   input.onkeydown = (e) => {
@@ -411,6 +505,91 @@ function startRename(tab: Tab) {
   };
   input.onblur = () => finish(true);
   input.onclick = input.ondblclick = (e) => e.stopPropagation();
+}
+
+// ---------- Preferências ----------
+function applyPreferences(next: Preferences) {
+  prefs = next;
+  for (const p of ptys.values()) {
+    p.term.options.fontFamily = prefs.fontFamily;
+    p.term.options.fontSize = prefs.fontSize;
+    p.term.options.cursorStyle = prefs.cursorStyle;
+    p.term.options.cursorBlink = prefs.cursorBlink;
+    p.term.options.scrollback = prefs.scrollback;
+    fitPane(p);
+  }
+  persistSession();
+}
+
+function zoomFont(delta: number | "reset") {
+  const fontSize = delta === "reset" ? DEFAULT_PREFERENCES.fontSize : clampFontSize(prefs.fontSize + delta);
+  applyPreferences(savePreferences({ fontSize }));
+}
+
+function preferencesDialog() {
+  const root = $("modal-root");
+  const close = () => { root.replaceChildren(); focused?.term.focus(); };
+  root.innerHTML = `
+    <div class="overlay">
+      <form class="modal">
+        <h3>Preferências</h3>
+        <label class="field">Fonte
+          <input type="text" name="fontFamily" value="${esc(prefs.fontFamily)}" autocomplete="off" />
+        </label>
+        <div class="row-fields">
+          <label class="field">Tamanho (px)
+            <input type="number" name="fontSize" min="10" max="28" value="${prefs.fontSize}" />
+          </label>
+          <label class="field">Histórico (linhas)
+            <input type="number" name="scrollback" min="500" max="50000" step="500" value="${prefs.scrollback}" />
+          </label>
+        </div>
+        <div class="row-fields">
+          <label class="field">Estilo do cursor
+            <select name="cursorStyle">
+              <option value="block" ${prefs.cursorStyle === "block" ? "selected" : ""}>Bloco</option>
+              <option value="bar" ${prefs.cursorStyle === "bar" ? "selected" : ""}>Barra</option>
+              <option value="underline" ${prefs.cursorStyle === "underline" ? "selected" : ""}>Sublinhado</option>
+            </select>
+          </label>
+          <label class="field">Shell padrão
+            <input type="text" name="shell" value="${esc(prefs.shell)}" placeholder="$SHELL do sistema" autocomplete="off" />
+          </label>
+        </div>
+        <div class="hint">Suporta status e diretório em zsh, bash e fish. O shell vale para novos painéis.</div>
+        <label class="check"><input type="checkbox" name="cursorBlink" ${prefs.cursorBlink ? "checked" : ""} /> Cursor piscante</label>
+        <label class="check"><input type="checkbox" name="restoreSession" ${prefs.restoreSession ? "checked" : ""} /> Restaurar abas abertas ao reabrir o app</label>
+        <div class="modal-actions">
+          <button type="button" class="btn spacer" data-a="reset">Padrões</button>
+          <button type="button" class="btn" data-a="cancel">Cancelar</button>
+          <button type="submit" class="btn primary">Salvar</button>
+        </div>
+      </form>
+    </div>`;
+  const form = root.querySelector("form")!;
+  root.querySelector(".overlay")!.addEventListener("mousedown", (e) => { if (e.target === e.currentTarget) close(); });
+  root.querySelector('[data-a="cancel"]')!.addEventListener("click", close);
+  root.querySelector('[data-a="reset"]')!.addEventListener("click", () => {
+    applyPreferences(savePreferences({ ...DEFAULT_PREFERENCES }));
+    close();
+  });
+  form.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); });
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const get = (n: string) => form.elements.namedItem(n) as HTMLInputElement;
+    applyPreferences(
+      savePreferences({
+        fontFamily: get("fontFamily").value,
+        fontSize: Number(get("fontSize").value),
+        scrollback: Number(get("scrollback").value),
+        cursorStyle: (form.elements.namedItem("cursorStyle") as HTMLSelectElement).value as CursorStyle,
+        shell: get("shell").value,
+        cursorBlink: get("cursorBlink").checked,
+        restoreSession: get("restoreSession").checked,
+      }),
+    );
+    close();
+  });
 }
 
 // ---------- Grupos ----------
@@ -484,21 +663,73 @@ function saveGroupDialog() {
   });
 }
 
-// ---------- Atalhos e inicialização ----------
-$("new-tab").onclick = () => newTab();
-$("save-group").onclick = saveGroupDialog;
-$("split").onclick = () => split("right");
-$("split-down").onclick = () => split("down");
+// ---------- Ações de menu / atalhos ----------
+let lastAction = "";
+let lastActionAt = 0;
+
+function runAction(action: string) {
+  const now = performance.now();
+  if (action === lastAction && now - lastActionAt < 60) return;
+  lastAction = action;
+  lastActionAt = now;
+
+  switch (action) {
+    case "new-tab": void newTab(); break;
+    case "split-right": void split("right"); break;
+    case "split-down": void split("down"); break;
+    case "rename-tab": if (active) startRename(active); break;
+    case "save-group": saveGroupDialog(); break;
+    case "close-pane": if (focused) closePane(focused); break;
+    case "find": openSearch(); break;
+    case "clear": focused?.term.clear(); break;
+    case "preferences": preferencesDialog(); break;
+    case "zoom-in": zoomFont(1); break;
+    case "zoom-out": zoomFont(-1); break;
+    case "zoom-reset": zoomFont("reset"); break;
+    case "check-updates": checkUpdatesHandler?.(); break;
+  }
+}
+
+$("new-tab").onclick = () => runAction("new-tab");
+$("save-group").onclick = () => runAction("save-group");
+$("open-prefs").onclick = () => runAction("preferences");
+$("find-btn").onclick = () => runAction("find");
+$("split").onclick = () => runAction("split-right");
+$("split-down").onclick = () => runAction("split-down");
 titleEl.ondblclick = () => active && startRename(active);
 
 window.addEventListener("keydown", (e) => {
   if (!e.metaKey) return;
   const k = e.key.toLowerCase();
-  if (k === "t") { e.preventDefault(); newTab(); }
-  else if (k === "d") { e.preventDefault(); split(e.shiftKey ? "down" : "right"); }
-  else if (k === "w") { e.preventDefault(); if (focused) closePane(focused); }
+  if (k === "t") { e.preventDefault(); runAction("new-tab"); }
+  else if (k === "d") { e.preventDefault(); runAction(e.shiftKey ? "split-down" : "split-right"); }
+  else if (k === "w") { e.preventDefault(); runAction("close-pane"); }
+  else if (k === "f") { e.preventDefault(); runAction("find"); }
+  else if (k === "k") { e.preventDefault(); runAction("clear"); }
+  else if (k === ",") { e.preventDefault(); runAction("preferences"); }
+  else if (k === "=" || k === "+") { e.preventDefault(); runAction("zoom-in"); }
+  else if (k === "-") { e.preventDefault(); runAction("zoom-out"); }
+  else if (k === "0") { e.preventDefault(); runAction("zoom-reset"); }
+  else if (e.shiftKey && k === "r") { e.preventDefault(); runAction("rename-tab"); }
+  else if (e.shiftKey && k === "s") { e.preventDefault(); runAction("save-group"); }
 });
 
-document.documentElement.style.setProperty("--bg", theme.background!);
-renderGroups();
-newTab();
+// ---------- Inicialização ----------
+async function init() {
+  document.documentElement.style.setProperty("--bg", theme.background!);
+  renderGroups();
+  const saved = prefs.restoreSession ? loadSession() : null;
+  if (saved) {
+    const restored: Tab[] = [];
+    for (const st of saved.tabs) {
+      restored.push(await newTab({ layout: st.layout, title: st.title, custom: st.custom }));
+    }
+    if (restored[saved.activeIndex]) select(restored[saved.activeIndex]);
+  } else {
+    await newTab();
+  }
+  booting = false;
+  persistSession();
+}
+
+void init();
