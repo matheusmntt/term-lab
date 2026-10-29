@@ -102,6 +102,8 @@ fn set_dock_icon() {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .menu(|app| menu::build_menu(app))
         .on_menu_event(|app, event| {
             let _ = app.emit("menu-action", event.id().as_ref());

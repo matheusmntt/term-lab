@@ -94,6 +94,7 @@ function installMock(scripts) {
     convertFileSrc: (p) => p,
     async invoke(cmd, args) {
       if (cmd === "plugin:event|listen") { (handlers[args.event] ??= []).push(args.handler); return args.handler; }
+      if (cmd === "plugin:updater|check") return null;
       if (cmd === "pty_spawn") {
         const text = scripts[spawned++ % scripts.length];
         setTimeout(() => emit("pty-output", { id: args.id, data: Array.from(enc.encode(text)) }), 60);

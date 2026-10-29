@@ -19,7 +19,16 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.icns", "icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk3QjFGRjM2MDFBOUZDQkEKUldTNi9La0JOdit4bDNmQXFBdDNoWDJ2NXdkVGFWYndNeUFzRzl4M0p4NmJ5QXFEMTBrQndJOU4K",
+      "endpoints": [
+        "https://github.com/matheusmntt/term-lab/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

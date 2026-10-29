@@ -16,6 +16,7 @@ import {
   DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences,
 } from "./preferences";
 import { clearSession, loadSession, saveSession } from "./session";
+import { initUpdater } from "./updater";
 
 type Status = "idle" | "running" | "error";
 
@@ -730,6 +731,7 @@ async function init() {
   }
   booting = false;
   persistSession();
+  initUpdater(registerUpdateChecker, () => focused?.term.focus());
 }
 
 void init();
