@@ -2,6 +2,9 @@
 name = "term-lab"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+homepage = "https://termlab.matheusmonteiro.me"
+repository = "https://github.com/matheusmntt/term-lab"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
