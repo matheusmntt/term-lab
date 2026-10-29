@@ -125,6 +125,7 @@ function createPane(tab: Tab, cwd = ""): Pane {
     fontSize: 13,
     cursorBlink: true,
     allowProposedApi: true,
+    minimumContrastRatio: 4, // garante legibilidade de textos apagados (ex.: autosuggestions)
     theme,
   });
   const fit = new FitAddon();
