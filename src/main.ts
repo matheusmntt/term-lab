@@ -366,7 +366,10 @@ function select(tab: Tab) {
   requestAnimationFrame(() => {
     const ps = leaves(tab.root);
     ps.forEach(fitPane);
-    if (ps.length) focus(focused && ps.includes(focused) ? focused : ps[0]);
+    // não rouba o foco de um campo de texto ativo (ex.: renomear aba)
+    if (ps.length && !(document.activeElement instanceof HTMLInputElement)) {
+      focus(focused && ps.includes(focused) ? focused : ps[0]);
+    }
   });
 }
 
