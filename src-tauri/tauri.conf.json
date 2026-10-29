@@ -38,7 +38,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk3QjFGRjM2MDFBOUZDQkEKUldTNi9La0JOdit4bDNmQXFBdDNoWDJ2NXdkVGFWYndNeUFzRzl4M0p4NmJ5QXFEMTBrQndJOU4K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMzQjlENTU1NEVDMUJFNjgKUldSb3ZzRk9WZFc1TXovSVowWTNkQkM3OG5GaGE5bWxjcFhvc2V5RHlHT3ZXZlV3ek1FVVlNaHIK",
       "endpoints": [
         "https://github.com/matheusmntt/term-lab/releases/latest/download/latest.json"
       ]
