@@ -81,8 +81,28 @@ fn pty_kill(state: State<Sessions>, id: u32) {
     }
 }
 
+/// Define o ícone do Dock em runtime (no `tauri dev` o app não está empacotado,
+/// então o macOS mostraria o ícone genérico de executável).
+#[cfg(target_os = "macos")]
+fn set_dock_icon() {
+    use objc2::{AnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let data = NSData::with_bytes(include_bytes!("../icons/icon.png"));
+    if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+        unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image)) };
+    }
+}
+
 fn main() {
     tauri::Builder::default()
+        .setup(|_app| {
+            #[cfg(target_os = "macos")]
+            set_dock_icon();
+            Ok(())
+        })
         .manage(Sessions::default())
         .invoke_handler(tauri::generate_handler![pty_spawn, pty_write, pty_resize, pty_kill])
         .run(tauri::generate_context!())
