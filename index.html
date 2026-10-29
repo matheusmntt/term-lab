@@ -10,11 +10,21 @@
       <aside id="sidebar">
         <div class="drag" data-tauri-drag-region></div>
         <div class="brand"><span class="logo">▸_</span> Term Lab</div>
+
         <div class="section-title">
           <span>Terminais</span>
           <button id="new-tab" class="icon-btn" title="Novo terminal (⌘T)">+</button>
         </div>
-        <nav id="tabs"></nav>
+        <nav id="tabs" class="list"></nav>
+
+        <div class="section-title">
+          <span>Grupos</span>
+          <button id="save-group" class="icon-btn" title="Salvar abas abertas como grupo">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3M3 13h10"/></svg>
+          </button>
+        </div>
+        <nav id="groups" class="list"></nav>
+
         <div class="sidebar-footer">
           <label>Tema</label>
           <select id="theme"></select>
@@ -22,16 +32,20 @@
       </aside>
       <section id="content">
         <header id="topbar" data-tauri-drag-region>
-          <div id="title" data-tauri-drag-region>shell</div>
+          <div id="title" data-tauri-drag-region title="Duplo clique para renomear">shell</div>
           <div class="actions">
-            <button id="split" class="icon-btn" title="Dividir painel (⌘D)">
+            <button id="split" class="icon-btn" title="Dividir ao lado (⌘D)">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M8 3v10"/></svg>
+            </button>
+            <button id="split-down" class="icon-btn" title="Dividir abaixo (⌘⇧D)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 8h12"/></svg>
             </button>
           </div>
         </header>
         <main id="panes"></main>
       </section>
     </div>
+    <div id="modal-root"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

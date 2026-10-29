@@ -11,6 +11,8 @@
   --border: color-mix(in srgb, var(--fg) 10%, transparent);
   --accent: #5b8cff;
   --green: #30d158;
+  --yellow: #ffd60a;
+  --red: #ff453a;
 }
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
@@ -19,6 +21,8 @@ body {
   font: 13px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden;
 }
+body.dragging { cursor: grabbing; }
+body.dragging * { user-select: none !important; }
 #app { display: flex; }
 
 /* Sidebar */
@@ -36,26 +40,42 @@ body {
 .section-title {
   display: flex; justify-content: space-between; align-items: center;
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--muted); padding: 0 8px 6px;
+  color: var(--muted); padding: 0 4px 6px 8px; margin-top: 6px;
 }
-#tabs { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.tab {
+.list { flex: 1 1 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 40px; }
+.list:empty::after { content: attr(data-empty); color: var(--muted); font-size: 12px; padding: 4px 8px; }
+#groups:empty::after { content: "Nenhum grupo salvo"; }
+
+.item {
   display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 8px; cursor: default;
 }
-.tab:hover { background: var(--hover); }
-.tab.active { background: var(--sel); }
-.tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); flex-shrink: 0; }
-.tab .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tab .count { font-size: 11px; color: var(--muted); }
-.tab .x { opacity: 0; color: var(--muted); padding: 0 3px; border-radius: 4px; }
-.tab:hover .x { opacity: 1; }
-.tab .x:hover { background: var(--hover); color: var(--fg); }
-.sidebar-footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.item:hover { background: var(--hover); }
+.item.active { background: var(--sel); }
+.item .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .sub { display: block; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .body { flex: 1; min-width: 0; }
+.item .count { font-size: 11px; color: var(--muted); }
+.item .x { opacity: 0; color: var(--muted); padding: 0 3px; border-radius: 4px; }
+.item:hover .x { opacity: 1; }
+.item .x:hover { background: var(--hover); color: var(--fg); }
+.item .glyph { width: 8px; text-align: center; color: var(--accent); font-size: 13px; }
+input.rename {
+  flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--accent); border-radius: 5px; padding: 1px 5px; outline: none; user-select: text;
+}
+
+/* Bolinha de status: verde = ocioso/concluído, amarelo = executando, vermelho = erro */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--green); box-shadow: 0 0 6px var(--green); transition: background .2s, box-shadow .2s; }
+[data-status="running"] > .dot, [data-status="running"] .pdot { background: var(--yellow); box-shadow: 0 0 7px var(--yellow); animation: pulse 1.2s ease-in-out infinite; }
+[data-status="error"] > .dot, [data-status="error"] .pdot { background: var(--red); box-shadow: 0 0 7px var(--red); }
+@keyframes pulse { 50% { opacity: .45; } }
+
+.sidebar-footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; margin-top: 8px; }
 
 /* Controles */
 .icon-btn {
   background: none; border: 0; color: var(--muted); width: 26px; height: 26px; border-radius: 7px;
-  display: grid; place-items: center; font-size: 17px; cursor: default;
+  display: grid; place-items: center; font-size: 17px; cursor: default; padding: 0;
 }
 .icon-btn:hover { background: var(--hover); color: var(--fg); }
 select {
@@ -72,13 +92,71 @@ select {
 #title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions { display: flex; gap: 4px; }
 #panes { flex: 1; position: relative; min-height: 0; margin: 0 12px 12px; }
-.tabview { position: absolute; inset: 0; display: none; gap: 8px; }
+.tabview { position: absolute; inset: 0; display: none; }
 .tabview.active { display: flex; }
+.tabview > .split, .tabview > .pane { flex: 1; min-width: 0; min-height: 0; }
+
+/* Layout em árvore */
+.split { display: flex; min-width: 0; min-height: 0; }
+.split.row { flex-direction: row; }
+.split.col { flex-direction: column; }
+.cell { display: flex; min-width: 0; min-height: 0; }
+.cell > .pane, .cell > .split { flex: 1; min-width: 0; min-height: 0; }
+.divider { flex-shrink: 0; position: relative; z-index: 2; }
+.split.row > .divider { width: 8px; cursor: col-resize; }
+.split.col > .divider { height: 8px; cursor: row-resize; }
+.divider::after {
+  content: ""; position: absolute; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity .15s;
+}
+.split.row > .divider::after { left: 3px; right: 3px; top: 0; bottom: 0; }
+.split.col > .divider::after { top: 3px; bottom: 3px; left: 0; right: 0; }
+.divider:hover::after { opacity: .6; }
+
+/* Painel */
 .pane {
-  flex: 1; min-width: 0; padding: 10px 6px 6px 12px; border-radius: 12px;
+  display: flex; flex-direction: column; border-radius: 12px; overflow: hidden;
   background: var(--bg); border: 1px solid var(--border);
   box-shadow: 0 1px 2px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.18);
-  overflow: hidden; user-select: text;
 }
 .pane.focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.pane.drag-src { opacity: .45; }
+.pane-header {
+  display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px 0 10px; flex-shrink: 0;
+  color: var(--muted); font-size: 12px; cursor: grab; border-bottom: 1px solid var(--border);
+}
+.pane.focus .pane-header { color: var(--fg); }
+.pane-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-btns { display: flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.pane:hover .pane-btns, .pane.focus .pane-btns { opacity: 1; }
+.pane-btns .icon-btn { width: 20px; height: 20px; font-size: 12px; }
+.pane-body { flex: 1; min-height: 0; padding: 6px 4px 6px 10px; user-select: text; }
 .xterm-viewport { background: transparent !important; }
+
+.drop-ghost {
+  position: fixed; z-index: 50; pointer-events: none; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  border: 2px solid var(--accent); transition: all .08s ease-out; display: none;
+}
+
+/* Modal */
+.overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.45); display: grid; place-items: center; }
+.modal {
+  width: 380px; max-width: 90vw; background: var(--side); border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 12px;
+}
+.modal h3 { margin: 0 0 2px; font-size: 16px; }
+.modal label.field { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12px; }
+.modal input[type="text"] {
+  font: inherit; font-size: 13px; color: var(--fg); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 9px; outline: none; user-select: text;
+}
+.modal input[type="text"]:focus { border-color: var(--accent); }
+.modal .hint { font-size: 11px; color: var(--muted); margin-top: -4px; }
+.checks { display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow-y: auto; }
+.check { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 6px; }
+.check:hover { background: var(--hover); }
+.check .muted { color: var(--muted); font-size: 11px; margin-left: auto; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.btn { font: inherit; color: var(--fg); background: var(--hover); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; cursor: default; }
+.btn.primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+.error-msg { color: var(--red); font-size: 12px; min-height: 0; }
