@@ -1,5 +1,5 @@
 cask "term-lab" do
-  version "0.2.0" # x-release-please-version
+  version "0.2.1" # x-release-please-version
   sha256 :no_check
 
   url "https://github.com/matheusmntt/term-lab/releases/download/v#{version}/Term.Lab_#{version}_universal.dmg"
