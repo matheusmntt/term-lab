@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Tag da release (ex.: v0.1.0)"
+        description: "Tag da release (ex.: v0.2.0)"
         required: true
         type: string
 
@@ -54,32 +54,50 @@ jobs:
           npx tsc
           npm test
 
-      - name: Configure Tauri build arguments
+      - name: Configure Tauri build & signing environment
         id: tauri-args
         env:
-          HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          RAW_TAURI_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          RAW_TAURI_PWD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RAW_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          RAW_APPLE_CERT_PWD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          RAW_APPLE_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          RAW_APPLE_ID: ${{ secrets.APPLE_ID }}
+          RAW_APPLE_PWD: ${{ secrets.APPLE_PASSWORD }}
+          RAW_APPLE_TEAM: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ "$HAS_UPDATER_KEY" = "true" ]; then
+          # Só exporta variáveis de assinatura se os secrets realmente estiverem preenchidos;
+          # caso contrário o tauri-bundler tenta importar um certificado PKCS#12 vazio e falha.
+          if [ -n "$RAW_TAURI_KEY" ]; then
+            {
+              echo "TAURI_SIGNING_PRIVATE_KEY<<EOF_TAURI_KEY"
+              echo "$RAW_TAURI_KEY"
+              echo "EOF_TAURI_KEY"
+            } >> "$GITHUB_ENV"
+            if [ -n "$RAW_TAURI_PWD" ]; then
+              echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${RAW_TAURI_PWD}" >> "$GITHUB_ENV"
+            fi
             echo "args=--target universal-apple-darwin" >> "$GITHUB_OUTPUT"
           else
             echo 'args=--target universal-apple-darwin --config {"bundle":{"createUpdaterArtifacts":false}}' >> "$GITHUB_OUTPUT"
           fi
 
+          if [ -n "$RAW_APPLE_CERT" ]; then
+            echo "APPLE_CERTIFICATE=${RAW_APPLE_CERT}" >> "$GITHUB_ENV"
+            echo "APPLE_CERTIFICATE_PASSWORD=${RAW_APPLE_CERT_PWD}" >> "$GITHUB_ENV"
+            [ -n "$RAW_APPLE_IDENTITY" ] && echo "APPLE_SIGNING_IDENTITY=${RAW_APPLE_IDENTITY}" >> "$GITHUB_ENV"
+            [ -n "$RAW_APPLE_ID" ] && echo "APPLE_ID=${RAW_APPLE_ID}" >> "$GITHUB_ENV"
+            [ -n "$RAW_APPLE_PWD" ] && echo "APPLE_PASSWORD=${RAW_APPLE_PWD}" >> "$GITHUB_ENV"
+            [ -n "$RAW_APPLE_TEAM" ] && echo "APPLE_TEAM_ID=${RAW_APPLE_TEAM}" >> "$GITHUB_ENV"
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ steps.meta.outputs.tag }}
           releaseName: "Term Lab v__VERSION__"
-          releaseBody: "Instale via Homebrew:\n```bash\nbrew tap matheusmntt/term-lab https://github.com/matheusmntt/term-lab.git\nbrew install --cask matheusmntt/term-lab/term-lab\n```"
+          releaseBody: "Instale via Homebrew:\n```bash\nbrew tap matheusmntt/term-lab https://github.com/matheusmntt/term-lab.git\nbrew install --cask --no-quarantine matheusmntt/term-lab/term-lab\n```"
           releaseDraft: false
           prerelease: false
           args: ${{ steps.tauri-args.outputs.args }}
