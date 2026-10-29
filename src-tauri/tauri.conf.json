@@ -11,7 +11,13 @@
   },
   "app": {
     "windows": [
-      { "title": "Term Lab", "width": 1100, "height": 700, "titleBarStyle": "Overlay", "hiddenTitle": true }
+      {
+        "title": "Term Lab",
+        "width": 1100,
+        "height": 700,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://github.com https://*.githubusercontent.com; object-src 'none'; base-uri 'self'"
@@ -21,7 +27,14 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
   },
   "plugins": {
     "updater": {
