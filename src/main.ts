@@ -165,7 +165,7 @@ function createPane(tab: Tab, cwd = ""): Pane {
     cursorBlink: prefs.cursorBlink,
     scrollback: prefs.scrollback,
     allowProposedApi: true,
-    minimumContrastRatio: 4, // garante legibilidade de textos apagados (ex.: autosuggestions)
+    minimumContrastRatio: 4, // garante legibilidade de textos apagados (ex.: autosuggestions, brightBlack)
     theme,
   });
   const fit = new FitAddon();
