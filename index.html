@@ -40,7 +40,12 @@
       </aside>
       <section id="content">
         <header id="topbar" data-tauri-drag-region>
-          <div id="title" data-tauri-drag-region title="Duplo clique para renomear">shell</div>
+          <div class="topbar-left" data-tauri-drag-region>
+            <button id="toggle-sidebar" class="icon-btn" title="Mostrar/ocultar barra lateral (⌘B)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/></svg>
+            </button>
+            <div id="title" data-tauri-drag-region title="Duplo clique para renomear">shell</div>
+          </div>
           <div class="actions">
             <button id="find-btn" class="icon-btn" title="Buscar no terminal (⌘F)">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.3"/><path d="M10.3 10.3L13.8 13.8"/></svg>

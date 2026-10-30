@@ -73,6 +73,8 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         "Visualizar",
         true,
         &[
+            &MenuItem::with_id(app, "toggle-sidebar", "Mostrar/Ocultar Barra Lateral", true, Some("CmdOrCtrl+B"))?,
+            &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "zoom-in", "Aumentar Fonte", true, Some("CmdOrCtrl+="))?,
             &MenuItem::with_id(app, "zoom-out", "Diminuir Fonte", true, Some("CmdOrCtrl+-"))?,
             &MenuItem::with_id(app, "zoom-reset", "Tamanho Padrão", true, Some("CmdOrCtrl+0"))?,

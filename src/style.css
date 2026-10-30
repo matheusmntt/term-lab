@@ -96,6 +96,10 @@ select {
   padding: 0 16px;
 }
 #title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-left { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: -6px; }
+/* Barra lateral recolhida (⌘B): mais colunas para o terminal (ex.: painel lateral do Claude Code) */
+body.sidebar-hidden #sidebar { display: none; }
+body.sidebar-hidden #topbar { padding-left: 84px; } /* espaço dos semáforos do macOS */
 .actions { display: flex; gap: 4px; }
 #panes { flex: 1; position: relative; min-height: 0; margin: 0 12px 12px; }
 .tabview { position: absolute; inset: 0; display: none; }

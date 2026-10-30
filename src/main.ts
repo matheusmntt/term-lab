@@ -97,6 +97,16 @@ themeSel.onchange = () => {
   for (const p of ptys.values()) p.term.options.theme = theme;
 };
 
+// ---------- Barra lateral (⌘B) ----------
+const SIDEBAR_KEY = "term-lab.sidebarHidden";
+function setSidebarHidden(hidden: boolean) {
+  document.body.classList.toggle("sidebar-hidden", hidden);
+  localStorage.setItem(SIDEBAR_KEY, hidden ? "1" : "0");
+  // o ResizeObserver de cada painel reajusta colunas/linhas e avisa o processo (SIGWINCH)
+  requestAnimationFrame(() => leaves(active?.root ?? null).forEach(fitPane));
+}
+document.body.classList.toggle("sidebar-hidden", localStorage.getItem(SIDEBAR_KEY) === "1");
+
 // ---------- Eventos do backend ----------
 listen<{ id: number; data: number[] }>("pty-output", (e) => {
   ptys.get(e.payload.id)?.term.write(new Uint8Array(e.payload.data));
@@ -728,6 +738,7 @@ function runAction(action: string) {
     case "zoom-out": zoomFont(-1); break;
     case "zoom-reset": zoomFont("reset"); break;
     case "check-updates": checkUpdatesHandler?.(); break;
+    case "toggle-sidebar": setSidebarHidden(!document.body.classList.contains("sidebar-hidden")); break;
   }
 }
 
@@ -737,6 +748,7 @@ $("open-prefs").onclick = () => runAction("preferences");
 $("find-btn").onclick = () => runAction("find");
 $("split").onclick = () => runAction("split-right");
 $("split-down").onclick = () => runAction("split-down");
+$("toggle-sidebar").onclick = () => runAction("toggle-sidebar");
 titleEl.ondblclick = () => active && startRename(active);
 
 window.addEventListener("keydown", (e) => {
@@ -747,6 +759,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "w") { e.preventDefault(); runAction("close-pane"); }
   else if (k === "f") { e.preventDefault(); runAction("find"); }
   else if (k === "k") { e.preventDefault(); runAction("clear"); }
+  else if (k === "b") { e.preventDefault(); runAction("toggle-sidebar"); }
   else if (k === ",") { e.preventDefault(); runAction("preferences"); }
   else if (k === "=" || k === "+") { e.preventDefault(); runAction("zoom-in"); }
   else if (k === "-") { e.preventDefault(); runAction("zoom-out"); }
