@@ -2,6 +2,23 @@
 
 Todas as mudanças relevantes deste projeto são documentadas neste arquivo, geradas automaticamente a partir de _Conventional Commits_.
 
+## [0.3.0](https://github.com/matheusmntt/term-lab/compare/v0.2.1...v0.3.0) (2026-10-30)
+
+
+### Features
+
+* **terminal:** render with the WebGL addon ([e3e91d8](https://github.com/matheusmntt/term-lab/commit/e3e91d8494d730ff7d22404a6dc9d34519cc2b6c))
+* **ui:** add collapsible sidebar (Cmd+B) ([7bd2096](https://github.com/matheusmntt/term-lab/commit/7bd20969a20a3f9dd21f4ed62d6a547d9befe4e0))
+
+
+### Bug Fixes
+
+* **ci:** never downgrade the Homebrew cask on concurrent releases ([fea3839](https://github.com/matheusmntt/term-lab/commit/fea38395757b92b664c3667aa351b13110f2f1ad))
+* **homebrew:** restore cask to v0.2.1 ([5e7c3e6](https://github.com/matheusmntt/term-lab/commit/5e7c3e69baad5ae216a9566a23d54b001ff54e46))
+* **terminal:** fit xterm to the visible pane area ([72955a2](https://github.com/matheusmntt/term-lab/commit/72955a2b34c44f8d82468938de7f52e2e25f6592))
+* **terminal:** keep scroll position in sync when returning to a tab ([6563bfb](https://github.com/matheusmntt/term-lab/commit/6563bfb347ea6e373e7fa75eddd62a2bc7d4f4cd))
+* **themes:** restore original brightBlack palette colors ([cd52cc1](https://github.com/matheusmntt/term-lab/commit/cd52cc12880b364047dca5ea738a956f73bac04a))
+
 ## [0.2.1](https://github.com/matheusmntt/term-lab/compare/v0.2.0...v0.2.1) (2026-10-29)
 
 
