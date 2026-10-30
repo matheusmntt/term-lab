@@ -23,6 +23,11 @@ jobs:
   build-and-publish:
     name: Build Universal macOS & Update Homebrew Cask
     runs-on: macos-latest
+    # Serializa releases: duas execuções simultâneas (ex.: re-run de uma versão antiga)
+    # não podem disputar a atualização do cask na main.
+    concurrency:
+      group: release-macos-homebrew-cask
+      cancel-in-progress: false
     steps:
       - name: Resolve release tag
         id: meta
@@ -119,6 +124,20 @@ jobs:
             const fs = require("node:fs");
             const path = "Casks/term-lab.rb";
             let rb = fs.readFileSync(path, "utf8");
+
+            // Nunca rebaixa o cask: um build de versão antiga (re-run, tag manual)
+            // não pode sobrescrever uma versão mais nova já publicada.
+            const parse = (v) => v.replace(/^v/, "").split(/[.+-]/).slice(0, 3).map((n) => parseInt(n, 10) || 0);
+            const current = (rb.match(/^\s*version\s+"([^"]+)"/m) || [])[1];
+            if (current) {
+              const [a, b] = [parse(process.env.VERSION), parse(current)];
+              const cmp = a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+              if (cmp < 0) {
+                console.log(`Cask já está em ${current} (mais nova que ${process.env.VERSION}); nada a fazer.`);
+                process.exit(0);
+              }
+            }
+
             rb = rb.replace(/^(\s*version\s+")[^"]+(")/m, `$1${process.env.VERSION}$2`);
             rb = rb.replace(/^(\s*sha256\s+).*/m, `$1"${process.env.SHA256}"`);
             if (process.env.DMG_URL) {
@@ -133,5 +152,10 @@ jobs:
           git add Casks/term-lab.rb
           if ! git diff --cached --quiet; then
             git commit -m "chore(homebrew): update cask to ${TAG} [skip ci]"
-            git push origin main
+            # a main pode ter avançado durante o build (ex.: merge de PR): rebase e tenta de novo
+            for attempt in 1 2 3; do
+              git push origin main && break
+              [ "$attempt" = 3 ] && exit 1
+              git pull --rebase origin main
+            done
           fi
