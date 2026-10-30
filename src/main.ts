@@ -151,8 +151,11 @@ function createPane(tab: Tab, cwd = ""): Pane {
         <button class="icon-btn" data-a="close" title="Fechar painel (⌘W)">✕</button>
       </span>
     </div>
-    <div class="pane-body"></div>`;
-  const host = el.querySelector(".pane-body") as HTMLElement;
+    <div class="pane-body"><div class="term-host"></div></div>`;
+  // O xterm é montado num elemento interno sem padding: o FitAddon mede a altura/largura
+  // computada do elemento pai e, com `box-sizing: border-box`, ela incluiria o padding,
+  // gerando linhas/colunas a mais que ficavam cortadas (ex.: rodapé do Claude Code).
+  const host = el.querySelector(".term-host") as HTMLElement;
   const titleSpan = el.querySelector(".pane-title") as HTMLElement;
 
   const term = new Terminal({

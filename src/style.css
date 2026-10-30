@@ -150,7 +150,8 @@ select {
 .pane-btns { display: flex; gap: 2px; opacity: 0; transition: opacity .15s; }
 .pane:hover .pane-btns, .pane.focus .pane-btns { opacity: 1; }
 .pane-btns .icon-btn { width: 20px; height: 20px; font-size: 12px; }
-.pane-body { flex: 1; min-height: 0; padding: 6px 4px 6px 10px; user-select: text; }
+.pane-body { flex: 1; min-height: 0; min-width: 0; display: flex; padding: 6px 4px 6px 10px; user-select: text; }
+.term-host { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .xterm-viewport { background: transparent !important; }
 
 .drop-ghost {
