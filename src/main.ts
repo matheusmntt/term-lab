@@ -248,6 +248,26 @@ function fitPane(p: Pane) {
   if (p.host.clientWidth > 0 && p.host.clientHeight > 0) p.fit.fit();
 }
 
+/**
+ * Ressincroniza a barra de rolagem do xterm com o buffer.
+ * Enquanto a aba está oculta (`display: none`) o navegador ignora `scrollTop` e mede
+ * altura 0, então o viewport do xterm fica preso na posição de quando a aba foi
+ * escondida. Ao voltar, o primeiro scroll "pulava" para lá (ex.: início de um
+ * `npm run test`). Mover o buffer 1 linha e voltar força o xterm a recalcular a área
+ * de rolagem e o `scrollTop`, mantendo a posição real (o fim da saída, se estava
+ * acompanhando).
+ */
+function resyncScroll(p: Pane) {
+  if (!p.host.clientHeight) return;
+  const b = p.term.buffer.active;
+  if (b.baseY === 0) return; // sem scrollback, nada a sincronizar
+  const followOutput = b.viewportY === b.baseY;
+  const y = b.viewportY;
+  p.term.scrollToLine(y === 0 ? 1 : y - 1);
+  if (followOutput) p.term.scrollToBottom();
+  else p.term.scrollToLine(y);
+}
+
 function focus(p: Pane) {
   focused?.el.classList.remove("focus");
   focused = p;
@@ -476,7 +496,7 @@ function select(tab: Tab) {
   persistSession();
   requestAnimationFrame(() => {
     const ps = leaves(tab.root);
-    ps.forEach(fitPane);
+    ps.forEach((p) => { fitPane(p); resyncScroll(p); });
     // não rouba o foco de um campo de texto ativo (ex.: renomear aba ou busca)
     if (ps.length && !(document.activeElement instanceof HTMLInputElement)) {
       focus(focused && ps.includes(focused) ? focused : ps[0]);
