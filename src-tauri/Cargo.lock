@@ -3817,7 +3817,7 @@ dependencies = [
 
 [[package]]
 name = "term-lab"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "objc2",
  "objc2-app-kit",
