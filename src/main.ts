@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { themes } from "./themes";
 import {
   type Node, type Side, type SavedNode,
@@ -215,6 +216,7 @@ function createPane(tab: Tab, cwd = ""): Pane {
 /** Abre o xterm (o elemento já precisa estar no DOM) e inicia o shell. */
 async function launch(p: Pane) {
   p.term.open(p.host);
+  enableWebgl(p.term);
   fitPane(p);
   p.ro = new ResizeObserver(() => fitPane(p));
   p.ro.observe(p.host);
@@ -225,6 +227,21 @@ async function launch(p: Pane) {
     cwd: p.cwd || null,
     shell: prefs.shell || null,
   });
+}
+
+/**
+ * Renderizador WebGL: desenha caracteres de caixa (─ │ ╭ ▌…) como glifos próprios,
+ * sem as falhas do renderizador DOM, e é bem mais rápido com saídas grandes.
+ * Se o WebGL não estiver disponível ou o contexto da GPU for perdido, volta ao DOM.
+ */
+function enableWebgl(term: Terminal) {
+  try {
+    const webgl = new WebglAddon();
+    webgl.onContextLoss(() => webgl.dispose());
+    term.loadAddon(webgl);
+  } catch {
+    /* mantém o renderizador DOM */
+  }
 }
 
 function fitPane(p: Pane) {
