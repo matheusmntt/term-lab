@@ -56,6 +56,20 @@ body.dragging * { user-select: none !important; }
 .item:hover .x { opacity: 1; }
 .item .x:hover { background: var(--hover); color: var(--fg); }
 .item .glyph { width: 8px; text-align: center; color: var(--accent); font-size: 13px; }
+/* Terminais agrupados por grupo salvo: cabeçalho colapsável + filhos indentados */
+.tab-group { display: flex; flex-direction: column; gap: 2px; }
+.tab-group-header { gap: 7px; }
+.tab-group-header .t { font-weight: 600; }
+.tab-group-chevron {
+  width: 14px; margin-right: -2px; text-align: center; color: var(--fg); font-size: 14px; line-height: 1;
+  transition: transform .15s ease;
+}
+.tab-group.collapsed .tab-group-chevron { transform: rotate(-90deg); }
+.tab-group-items {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-left: 11px; padding-left: 8px; border-left: 1px solid var(--border);
+}
+.tab-group-items[hidden] { display: none; }
 input.rename {
   flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--bg);
   border: 1px solid var(--accent); border-radius: 5px; padding: 1px 5px; outline: none; user-select: text;

@@ -4,6 +4,7 @@ import type { SavedTab } from "./groups";
 export interface SessionState {
   tabs: SavedTab[];
   activeIndex: number;
+  collapsedGroups?: string[]; // ids dos grupos recolhidos na seção "Terminais"
 }
 
 const KEY = "term-lab.session";
@@ -30,15 +31,28 @@ export function loadSession(): SessionState | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SessionState>;
     if (!Array.isArray(parsed.tabs) || parsed.tabs.length === 0) return null;
-    const tabs = parsed.tabs.filter(
-      (t): t is SavedTab =>
-        !!t && typeof t.title === "string" && typeof t.custom === "boolean" && isValidNode(t.layout),
-    );
+    const tabs = parsed.tabs
+      .filter(
+        (t): t is SavedTab =>
+          !!t && typeof t.title === "string" && typeof t.custom === "boolean" && isValidNode(t.layout),
+      )
+      .map(({ title, custom, layout, groupId, groupName }) => {
+        const tab: SavedTab = { title, custom, layout };
+        if (typeof groupId === "string" && groupId) {
+          tab.groupId = groupId;
+          tab.groupName = typeof groupName === "string" ? groupName : "";
+        }
+        return tab;
+      });
     if (tabs.length === 0) return null;
     const idx = typeof parsed.activeIndex === "number" ? parsed.activeIndex : 0;
+    const collapsed = Array.isArray(parsed.collapsedGroups)
+      ? parsed.collapsedGroups.filter((g): g is string => typeof g === "string")
+      : [];
     return {
       tabs,
       activeIndex: Math.min(tabs.length - 1, Math.max(0, idx)),
+      collapsedGroups: collapsed,
     };
   } catch {
     return null;
@@ -55,6 +69,7 @@ export function saveSession(state: SessionState): void {
     JSON.stringify({
       tabs: state.tabs,
       activeIndex: Math.min(state.tabs.length - 1, Math.max(0, state.activeIndex)),
+      collapsedGroups: state.collapsedGroups ?? [],
     }),
   );
 }

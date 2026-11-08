@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { deleteGroup, loadGroups, saveGroup } from "./groups";
+import { deleteGroup, loadGroups, saveGroup, upsertGroup } from "./groups";
 import { DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences } from "./preferences";
 import { clearSession, loadSession, saveSession } from "./session";
 
@@ -60,6 +60,18 @@ describe("groups", () => {
     expect(deleteGroup(g1[0].id)).toEqual([]);
     expect(loadGroups()).toEqual([]);
   });
+
+  it("upsertGroup returns the saved group keeping a stable id on replace", () => {
+    const tab = { title: "api", custom: false, layout: { kind: "leaf" as const, cwd: "/app/api" } };
+    const first = upsertGroup({ name: "Projeto", dir: "/app", tabs: [tab] });
+    expect(first.saved.id).toBeTruthy();
+    expect(first.groups).toHaveLength(1);
+
+    const second = upsertGroup({ name: "PROJETO", dir: "/app", tabs: [tab, tab] });
+    expect(second.saved.id).toBe(first.saved.id);
+    expect(second.saved.tabs).toHaveLength(2);
+    expect(loadGroups()).toHaveLength(1);
+  });
 });
 
 describe("session", () => {
@@ -91,6 +103,36 @@ describe("session", () => {
 
     clearSession();
     expect(loadSession()).toBeNull();
+  });
+
+  it("preserves group links and collapsed groups", () => {
+    saveSession({
+      activeIndex: 0,
+      collapsedGroups: ["g1"],
+      tabs: [
+        { title: "api", custom: false, layout: { kind: "leaf", cwd: "/p/api" }, groupId: "g1", groupName: "Projeto" },
+        { title: "solo", custom: false, layout: { kind: "leaf", cwd: "/p" } },
+      ],
+    });
+    const loaded = loadSession()!;
+    expect(loaded.collapsedGroups).toEqual(["g1"]);
+    expect(loaded.tabs[0].groupId).toBe("g1");
+    expect(loaded.tabs[0].groupName).toBe("Projeto");
+    expect(loaded.tabs[1].groupId).toBeUndefined();
+  });
+
+  it("drops invalid group fields from stored sessions", () => {
+    localStorage.setItem(
+      "term-lab.session",
+      JSON.stringify({
+        activeIndex: 0,
+        collapsedGroups: ["g1", 42, null],
+        tabs: [{ title: "x", custom: false, layout: { kind: "leaf", cwd: "/" }, groupId: 7, groupName: "y" }],
+      }),
+    );
+    const loaded = loadSession()!;
+    expect(loaded.collapsedGroups).toEqual(["g1"]);
+    expect(loaded.tabs[0]).toEqual({ title: "x", custom: false, layout: { kind: "leaf", cwd: "/" } });
   });
 
   it("ignores malformed session data", () => {

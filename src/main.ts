@@ -11,7 +11,7 @@ import {
   type Node, type Side, type SavedNode,
   leaves, without, insertBeside, swapLeaves, serialize, hydrate,
 } from "./layout";
-import { type Group, loadGroups, saveGroup, deleteGroup } from "./groups";
+import { type Group, loadGroups, upsertGroup, deleteGroup } from "./groups";
 import {
   type CursorStyle, type Preferences,
   DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences,
@@ -41,6 +41,8 @@ interface Tab {
   root: Node<Pane> | null;
   view: HTMLElement;
   tabEl: HTMLElement;
+  groupId?: string; // grupo salvo ao qual a aba pertence (agrupada na seção "Terminais")
+  groupName?: string;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -54,6 +56,8 @@ const searchInput = $<HTMLInputElement>("search-input");
 
 const tabs: Tab[] = [];
 const ptys = new Map<number, Pane>();
+const collapsedGroups = new Set<string>();
+const groupHeaders = new Map<string, HTMLElement>();
 let active: Tab | null = null;
 let focused: Pane | null = null;
 let nextId = 1;
@@ -83,7 +87,9 @@ function persistSession() {
       title: t.title,
       custom: t.custom,
       layout: serialize(t.root!, (p) => p.cwd),
+      ...(t.groupId ? { groupId: t.groupId, groupName: t.groupName ?? "" } : {}),
     })),
+    collapsedGroups: [...collapsedGroups].filter((id) => openTabs.some((t) => t.groupId === id)),
   });
 }
 
@@ -124,11 +130,23 @@ function setStatus(p: Pane, s: Status) {
   refreshTab(p.tab);
 }
 
-function tabStatus(tab: Tab): Status {
-  const ps = leaves(tab.root);
+function aggregateStatus(ps: Pane[]): Status {
   if (ps.some((p) => p.status === "running")) return "running";
   if (ps.some((p) => p.status === "error")) return "error";
   return "idle";
+}
+
+function tabStatus(tab: Tab): Status {
+  return aggregateStatus(leaves(tab.root));
+}
+
+/** Status agregado de todos os terminais de um grupo (visível mesmo com o grupo recolhido). */
+function refreshGroupHeader(groupId: string) {
+  const header = groupHeaders.get(groupId);
+  if (!header) return;
+  const members = tabs.filter((t) => t.groupId === groupId);
+  header.dataset.status = aggregateStatus(members.flatMap((t) => leaves(t.root)));
+  header.querySelector(".count")!.textContent = `${members.length}`;
 }
 
 /** Atualiza título automático, contador de painéis e cor da bolinha da aba. */
@@ -139,7 +157,53 @@ function refreshTab(tab: Tab) {
   if (t) t.textContent = tab.title;
   tab.tabEl.querySelector(".count")!.textContent = ps.length > 1 ? `${ps.length}` : "";
   tab.tabEl.dataset.status = tabStatus(tab);
+  if (tab.groupId) refreshGroupHeader(tab.groupId);
   if (tab === active) titleEl.textContent = tab.title;
+}
+
+/**
+ * Monta a seção "Terminais": abas avulsas ficam na raiz e as de um grupo ficam
+ * aninhadas sob um cabeçalho colapsável, na posição da primeira aba do grupo.
+ */
+function renderSidebarTabs() {
+  groupHeaders.clear();
+  const nodes: HTMLElement[] = [];
+  const containers = new Map<string, HTMLElement>();
+  for (const tab of tabs) {
+    const gid = tab.groupId;
+    if (!gid) {
+      nodes.push(tab.tabEl);
+      continue;
+    }
+    let items = containers.get(gid);
+    if (!items) {
+      const collapsed = collapsedGroups.has(gid);
+      const wrap = document.createElement("div");
+      wrap.className = "tab-group";
+      wrap.classList.toggle("collapsed", collapsed);
+      const header = document.createElement("div");
+      header.className = "item tab-group-header";
+      header.title = collapsed ? "Expandir grupo" : "Recolher grupo";
+      header.innerHTML = `<span class="tab-group-chevron">▾</span><span class="dot"></span><span class="t">${esc(tab.groupName || "grupo")}</span><span class="count"></span><span class="x" title="Fechar terminais do grupo">✕</span>`;
+      header.onclick = () => {
+        if (collapsedGroups.has(gid)) collapsedGroups.delete(gid);
+        else collapsedGroups.add(gid);
+        renderSidebarTabs();
+        persistSession();
+      };
+      header.querySelector(".x")!.addEventListener("click", (e) => { e.stopPropagation(); closeGroupTabs(gid); });
+      items = document.createElement("div");
+      items.className = "tab-group-items";
+      items.hidden = collapsed;
+      wrap.append(header, items);
+      containers.set(gid, items);
+      groupHeaders.set(gid, header);
+      nodes.push(wrap);
+    }
+    items.appendChild(tab.tabEl);
+  }
+  tabsEl.replaceChildren(...nodes);
+  for (const gid of groupHeaders.keys()) refreshGroupHeader(gid);
 }
 
 // ---------- Painéis ----------
@@ -465,7 +529,10 @@ function closePane(p: Pane) {
 }
 
 // ---------- Abas ----------
-interface NewTabOpts { cwd?: string; layout?: SavedNode; title?: string; custom?: boolean; dir?: string }
+interface NewTabOpts {
+  cwd?: string; layout?: SavedNode; title?: string; custom?: boolean; dir?: string;
+  groupId?: string; groupName?: string;
+}
 
 async function newTab(o: NewTabOpts = {}): Promise<Tab> {
   const view = document.createElement("div");
@@ -476,10 +543,13 @@ async function newTab(o: NewTabOpts = {}): Promise<Tab> {
   tabEl.className = "item";
   tabEl.dataset.status = "idle";
   tabEl.innerHTML = `<span class="dot"></span><span class="t">shell</span><span class="count"></span><span class="x" title="Fechar aba">✕</span>`;
-  tabsEl.appendChild(tabEl);
 
-  const tab: Tab = { id: nextId++, title: o.title ?? "shell", custom: !!o.custom, root: null, view, tabEl };
+  const tab: Tab = {
+    id: nextId++, title: o.title ?? "shell", custom: !!o.custom, root: null, view, tabEl,
+    groupId: o.groupId, groupName: o.groupName,
+  };
   tabs.push(tab);
+  renderSidebarTabs();
   tabEl.onclick = () => select(tab);
   tabEl.ondblclick = () => startRename(tab);
   tabEl.querySelector(".x")!.addEventListener("click", (e) => { e.stopPropagation(); closeTab(tab); });
@@ -520,11 +590,29 @@ function closeTab(tab: Tab) {
   tab.view.remove();
   tab.tabEl.remove();
   tabs.splice(tabs.indexOf(tab), 1);
+  renderSidebarTabs();
   if (tabs.length === 0) void newTab();
   else {
     if (active === tab) select(tabs[tabs.length - 1]);
     else persistSession();
   }
+}
+
+/** Fecha de uma vez todos os terminais abertos de um grupo. */
+function closeGroupTabs(groupId: string) {
+  for (const t of tabs.filter((t) => t.groupId === groupId)) closeTab(t);
+  collapsedGroups.delete(groupId);
+  persistSession();
+}
+
+/** Desvincula as abas abertas de um grupo (ex.: grupo excluído), devolvendo-as à lista principal. */
+function unlinkGroupTabs(groupId: string) {
+  for (const t of tabs) {
+    if (t.groupId === groupId) { t.groupId = undefined; t.groupName = undefined; }
+  }
+  collapsedGroups.delete(groupId);
+  renderSidebarTabs();
+  persistSession();
 }
 
 function startRename(tab: Tab) {
@@ -652,15 +740,30 @@ function renderGroups() {
     el.title = `${g.dir}\nClique para abrir`;
     el.innerHTML = `<span class="glyph">▦</span><span class="body"><span class="t">${esc(g.name)}</span><span class="sub">${g.tabs.length} aba(s) · ${esc(basename(g.dir))}</span></span><span class="x" title="Excluir grupo">✕</span>`;
     el.onclick = () => openGroup(g);
-    el.querySelector(".x")!.addEventListener("click", (e) => { e.stopPropagation(); deleteGroup(g.id); renderGroups(); });
+    el.querySelector(".x")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteGroup(g.id);
+      renderGroups();
+      unlinkGroupTabs(g.id);
+    });
     groupsEl.appendChild(el);
   }
 }
 
+/** Abre o grupo; se ele já tiver terminais abertos, apenas expande o agrupamento e foca neles. */
 async function openGroup(g: Group) {
+  collapsedGroups.delete(g.id);
+  const existing = tabs.filter((t) => t.groupId === g.id);
+  if (existing.length > 0) {
+    renderSidebarTabs();
+    select(existing.includes(active!) ? active! : existing[0]);
+    return;
+  }
   const created: Tab[] = [];
   for (const st of g.tabs) {
-    created.push(await newTab({ layout: st.layout, title: st.title, custom: st.custom, dir: g.dir }));
+    created.push(
+      await newTab({ layout: st.layout, title: st.title, custom: st.custom, dir: g.dir, groupId: g.id, groupName: g.name }),
+    );
   }
   if (created[0]) select(created[0]);
 }
@@ -700,7 +803,7 @@ function saveGroupDialog() {
     const chosen = Array.from(form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')).map((c) => tabs[Number(c.value)]);
     if (!name) return void (err.textContent = "Dê um nome ao grupo.");
     if (chosen.length === 0) return void (err.textContent = "Selecione ao menos uma aba.");
-    saveGroup({
+    const { saved } = upsertGroup({
       name,
       dir,
       tabs: chosen.map((t) => ({
@@ -709,7 +812,14 @@ function saveGroupDialog() {
         layout: serialize(t.root!, (p) => p.cwd || dir),
       })),
     });
+    // vincula as abas marcadas ao grupo salvo; abas que saíram de um grupo substituído voltam a ser avulsas
+    for (const t of tabs) {
+      if (chosen.includes(t)) { t.groupId = saved.id; t.groupName = saved.name; }
+      else if (t.groupId === saved.id) { t.groupId = undefined; t.groupName = undefined; }
+    }
     renderGroups();
+    renderSidebarTabs();
+    persistSession();
     close();
   });
 }
@@ -774,9 +884,15 @@ async function init() {
   renderGroups();
   const saved = prefs.restoreSession ? loadSession() : null;
   if (saved) {
+    // vínculos com grupos que já foram excluídos são descartados
+    const groups = new Map(loadGroups().map((g) => [g.id, g]));
+    for (const id of saved.collapsedGroups ?? []) if (groups.has(id)) collapsedGroups.add(id);
     const restored: Tab[] = [];
     for (const st of saved.tabs) {
-      restored.push(await newTab({ layout: st.layout, title: st.title, custom: st.custom }));
+      const g = st.groupId ? groups.get(st.groupId) : undefined;
+      restored.push(
+        await newTab({ layout: st.layout, title: st.title, custom: st.custom, groupId: g?.id, groupName: g?.name }),
+      );
     }
     if (restored[saved.activeIndex]) select(restored[saved.activeIndex]);
   } else {
