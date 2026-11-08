@@ -4,6 +4,7 @@ export interface SavedTab {
   title: string;
   custom: boolean; // true se o usuário renomeou a aba
   layout: SavedNode;
+  key?: string; // id estável da aba dentro do grupo (liga a aba salva à aba aberta)
   groupId?: string; // grupo ao qual a aba aberta pertence (só na sessão)
   groupName?: string;
 }
@@ -19,11 +20,19 @@ export interface Group {
 const KEY = "term-lab.groups";
 
 export function loadGroups(): Group[] {
+  let groups: Group[];
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]");
+    groups = JSON.parse(localStorage.getItem(KEY) ?? "[]");
   } catch {
     return [];
   }
+  // grupos salvos antes da existência de `key` ganham chaves uma única vez
+  let changed = false;
+  for (const g of groups) {
+    for (const t of g.tabs) if (!t.key) { t.key = crypto.randomUUID(); changed = true; }
+  }
+  if (changed) persist(groups);
+  return groups;
 }
 
 function persist(groups: Group[]) {
@@ -34,7 +43,11 @@ function persist(groups: Group[]) {
 export function upsertGroup(group: Omit<Group, "id">): { groups: Group[]; saved: Group } {
   const groups = loadGroups();
   const i = groups.findIndex((g) => g.name.toLowerCase() === group.name.toLowerCase());
-  const saved: Group = { id: i >= 0 ? groups[i].id : crypto.randomUUID(), ...group };
+  const saved: Group = {
+    id: i >= 0 ? groups[i].id : crypto.randomUUID(),
+    ...group,
+    tabs: group.tabs.map((t) => ({ ...t, key: t.key || crypto.randomUUID() })),
+  };
   if (i >= 0) groups[i] = saved;
   else groups.push(saved);
   persist(groups);
@@ -46,14 +59,25 @@ export function saveGroup(group: Omit<Group, "id">): Group[] {
   return upsertGroup(group).groups;
 }
 
-/** Acrescenta uma aba ao grupo salvo (ex.: aba arrastada para o grupo na sidebar). */
+/**
+ * Acrescenta uma aba ao grupo salvo (ex.: aba arrastada para o grupo na sidebar).
+ * Se o grupo já tiver uma aba com a mesma `key`, ela é atualizada em vez de duplicada.
+ */
 export function appendTabToGroup(id: string, tab: SavedTab): Group[] {
   const groups = loadGroups();
   const g = groups.find((g) => g.id === id);
   if (!g) return groups;
-  g.tabs.push(tab);
+  const entry = { ...tab, key: tab.key || crypto.randomUUID() };
+  const i = g.tabs.findIndex((t) => t.key === entry.key);
+  if (i >= 0) g.tabs[i] = entry;
+  else g.tabs.push(entry);
   persist(groups);
   return groups;
+}
+
+/** Abas salvas do grupo que não estão abertas (nenhuma aba aberta com a mesma `key`). */
+export function missingGroupTabs(group: Group, openKeys: (string | undefined)[]): SavedTab[] {
+  return group.tabs.filter((t) => !openKeys.includes(t.key));
 }
 
 /**

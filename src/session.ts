@@ -36,11 +36,12 @@ export function loadSession(): SessionState | null {
         (t): t is SavedTab =>
           !!t && typeof t.title === "string" && typeof t.custom === "boolean" && isValidNode(t.layout),
       )
-      .map(({ title, custom, layout, groupId, groupName }) => {
+      .map(({ title, custom, layout, key, groupId, groupName }) => {
         const tab: SavedTab = { title, custom, layout };
         if (typeof groupId === "string" && groupId) {
           tab.groupId = groupId;
           tab.groupName = typeof groupName === "string" ? groupName : "";
+          if (typeof key === "string" && key) tab.key = key;
         }
         return tab;
       });

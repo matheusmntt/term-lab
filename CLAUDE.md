@@ -127,15 +127,16 @@ O layout de cada aba é uma árvore binária/n-ária pura `Node<P>` onde cada n�
 3. **Substituição Case-Insensitive:**
    - Salvar um grupo cujo `name` já existe (comparação `toLowerCase()`) **substitui** o grupo existente mantendo o mesmo `id` (`UUID`). Caso contrário, cria um novo registro.
 4. **Abertura de Grupo (`openGroup`) sem duplicação:**
-   - Se o grupo **já possui abas abertas** (`tab.groupId === g.id`), nada é recriado: o agrupamento é expandido (se recolhido) e o foco vai para a aba ativa do grupo ou a primeira dele.
-   - Caso contrário, abre todas as abas salvas do grupo (adicionando-as às já abertas) vinculadas ao `groupId`/`groupName` e foca na primeira aba recém-criada.
+   - Cada aba salva tem uma `key` estável (atribuída por `upsertGroup`/`appendTabToGroup`, e por `loadGroups` para grupos antigos); a aba aberta guarda a mesma chave em `groupKey`.
+   - Clicar no grupo cria **apenas as abas salvas que não estão abertas** (`missingGroupTabs`), vinculadas a `groupId`/`groupName`/`groupKey`. Se todas já estiverem abertas, nada é recriado.
+   - O agrupamento é expandido (se recolhido) e o foco vai para a aba ativa do grupo, a primeira aberta dele ou a primeira recém-criada.
 5. **Vínculo ao Salvar (`saveGroupDialog`):** As abas marcadas no modal passam imediatamente a pertencer ao grupo salvo (`upsertGroup` devolve o registro com `id` estável). Abas que pertenciam a um grupo substituído e foram desmarcadas voltam a ser avulsas.
 6. **Agrupamento na seção "Terminais":**
    - O cabeçalho do grupo (na posição da primeira aba do grupo) mostra seta `▾`/`▸`, bolinha com o **status agregado** de todos os painéis do grupo (mesma prioridade de `tabStatus`), nome e número de terminais abertos.
    - Clicar no cabeçalho recolhe/expande o grupo (`collapsedGroups`, persistido na sessão). O `✕` do cabeçalho fecha todos os terminais do grupo (`closeGroupTabs`).
 7. **Arrastar abas para grupos (`startTabDrag` / `assignTabToGroup`):**
    - Arrastar uma aba (`.item`) em **Terminais** por pelo menos `6px` (eventos de ponteiro; o drag & drop nativo do HTML5 é interceptado pelo WebView do Tauri) e soltar sobre um `.tab-group` (cabeçalho ou itens) a coloca naquele grupo, após o último membro (`moveIntoGroup`), expandindo o grupo.
-   - Ao **entrar** num grupo, a aba também é acrescentada ao grupo salvo (`appendTabToGroup`, com fallback `p.cwd || g.dir`). Ao **sair** (soltar na área livre de `#tabs`) ou ser movida para outro grupo, apenas o vínculo da sessão muda; o grupo salvo de origem não é alterado.
+   - Ao **entrar** num grupo, a aba também é acrescentada ao grupo salvo (`appendTabToGroup`, com fallback `p.cwd || g.dir`); se ela já estiver lá (mesma `key`), é atualizada em vez de duplicada. Ao **sair** (soltar na área livre de `#tabs`) ou ser movida para outro grupo, apenas o vínculo da sessão muda; o grupo salvo de origem não é alterado.
    - Soltar no mesmo grupo (ou uma aba avulsa na área livre) não faz nada. O clique que segue o arraste é suprimido para não selecionar a aba.
 8. **Exclusão de Grupo:** Excluir um grupo na seção **Grupos** mantém suas abas abertas, mas limpa `groupId`/`groupName` (`unlinkGroupTabs`). Ao restaurar a sessão, vínculos com grupos inexistentes também são descartados.
 

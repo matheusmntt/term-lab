@@ -11,7 +11,9 @@ import {
   type Node, type Side, type SavedNode,
   leaves, without, insertBeside, swapLeaves, serialize, hydrate,
 } from "./layout";
-import { type Group, loadGroups, upsertGroup, deleteGroup, appendTabToGroup, moveIntoGroup } from "./groups";
+import {
+  type Group, loadGroups, upsertGroup, deleteGroup, appendTabToGroup, moveIntoGroup, missingGroupTabs,
+} from "./groups";
 import {
   type CursorStyle, type Preferences,
   DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences,
@@ -43,6 +45,7 @@ interface Tab {
   tabEl: HTMLElement;
   groupId?: string; // grupo salvo ao qual a aba pertence (agrupada na seção "Terminais")
   groupName?: string;
+  groupKey?: string; // `key` da aba correspondente no grupo salvo
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -87,7 +90,7 @@ function persistSession() {
       title: t.title,
       custom: t.custom,
       layout: serialize(t.root!, (p) => p.cwd),
-      ...(t.groupId ? { groupId: t.groupId, groupName: t.groupName ?? "" } : {}),
+      ...(t.groupId ? { groupId: t.groupId, groupName: t.groupName ?? "", key: t.groupKey } : {}),
     })),
     collapsedGroups: [...collapsedGroups].filter((id) => openTabs.some((t) => t.groupId === id)),
   });
@@ -532,7 +535,7 @@ function closePane(p: Pane) {
 // ---------- Abas ----------
 interface NewTabOpts {
   cwd?: string; layout?: SavedNode; title?: string; custom?: boolean; dir?: string;
-  groupId?: string; groupName?: string;
+  groupId?: string; groupName?: string; groupKey?: string;
 }
 
 async function newTab(o: NewTabOpts = {}): Promise<Tab> {
@@ -547,7 +550,7 @@ async function newTab(o: NewTabOpts = {}): Promise<Tab> {
 
   const tab: Tab = {
     id: nextId++, title: o.title ?? "shell", custom: !!o.custom, root: null, view, tabEl,
-    groupId: o.groupId, groupName: o.groupName,
+    groupId: o.groupId, groupName: o.groupName, groupKey: o.groupKey,
   };
   tabs.push(tab);
   renderSidebarTabs();
@@ -685,7 +688,10 @@ function assignTabToGroup(tab: Tab, groupId?: string) {
   tabs.splice(0, tabs.length, ...moveIntoGroup(tabs, tab, g?.id));
   if (g && tab.root) {
     collapsedGroups.delete(g.id);
-    appendTabToGroup(g.id, { title: tab.title, custom: tab.custom, layout: serialize(tab.root, (p) => p.cwd || g.dir) });
+    tab.groupKey ??= crypto.randomUUID();
+    appendTabToGroup(g.id, {
+      title: tab.title, custom: tab.custom, key: tab.groupKey, layout: serialize(tab.root, (p) => p.cwd || g.dir),
+    });
     renderGroups();
   }
   renderSidebarTabs();
@@ -827,22 +833,25 @@ function renderGroups() {
   }
 }
 
-/** Abre o grupo; se ele já tiver terminais abertos, apenas expande o agrupamento e foca neles. */
+/**
+ * Abre o grupo sem duplicar: só cria as abas salvas que ainda não estão abertas
+ * (comparando `key`), expande o agrupamento e foca no grupo.
+ */
 async function openGroup(g: Group) {
   collapsedGroups.delete(g.id);
-  const existing = tabs.filter((t) => t.groupId === g.id);
-  if (existing.length > 0) {
-    renderSidebarTabs();
-    select(existing.includes(active!) ? active! : existing[0]);
-    return;
-  }
+  const open = tabs.filter((t) => t.groupId === g.id);
   const created: Tab[] = [];
-  for (const st of g.tabs) {
+  for (const st of missingGroupTabs(g, open.map((t) => t.groupKey))) {
     created.push(
-      await newTab({ layout: st.layout, title: st.title, custom: st.custom, dir: g.dir, groupId: g.id, groupName: g.name }),
+      await newTab({
+        layout: st.layout, title: st.title, custom: st.custom, dir: g.dir,
+        groupId: g.id, groupName: g.name, groupKey: st.key,
+      }),
     );
   }
-  if (created[0]) select(created[0]);
+  renderSidebarTabs();
+  const target = open.includes(active!) ? active : open[0] ?? created[0];
+  if (target) select(target);
 }
 
 function saveGroupDialog() {
@@ -886,6 +895,7 @@ function saveGroupDialog() {
       tabs: chosen.map((t) => ({
         title: t.title,
         custom: t.custom,
+        key: (t.groupKey ??= crypto.randomUUID()),
         layout: serialize(t.root!, (p) => p.cwd || dir),
       })),
     });
@@ -968,7 +978,10 @@ async function init() {
     for (const st of saved.tabs) {
       const g = st.groupId ? groups.get(st.groupId) : undefined;
       restored.push(
-        await newTab({ layout: st.layout, title: st.title, custom: st.custom, groupId: g?.id, groupName: g?.name }),
+        await newTab({
+          layout: st.layout, title: st.title, custom: st.custom,
+          groupId: g?.id, groupName: g?.name, groupKey: g ? st.key : undefined,
+        }),
       );
     }
     if (restored[saved.activeIndex]) select(restored[saved.activeIndex]);

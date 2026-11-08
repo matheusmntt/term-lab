@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { appendTabToGroup, deleteGroup, loadGroups, moveIntoGroup, saveGroup, upsertGroup } from "./groups";
+import {
+  appendTabToGroup, deleteGroup, loadGroups, missingGroupTabs, moveIntoGroup, saveGroup, upsertGroup,
+} from "./groups";
 import { DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences } from "./preferences";
 import { clearSession, loadSession, saveSession } from "./session";
 
@@ -102,6 +104,38 @@ describe("drag tabs into groups", () => {
   });
 });
 
+describe("group tab keys", () => {
+  const leaf = (cwd: string) => ({ kind: "leaf" as const, cwd });
+
+  it("assigns stable keys to legacy groups and keeps them across loads", () => {
+    localStorage.setItem(
+      "term-lab.groups",
+      JSON.stringify([{ id: "g", name: "G", dir: "/", tabs: [{ title: "a", custom: false, layout: leaf("/a") }] }]),
+    );
+    const key = loadGroups()[0].tabs[0].key;
+    expect(key).toBeTruthy();
+    expect(loadGroups()[0].tabs[0].key).toBe(key);
+  });
+
+  it("appendTabToGroup does not duplicate a tab with the same key", () => {
+    const { saved } = upsertGroup({ name: "G", dir: "/", tabs: [{ title: "a", custom: false, layout: leaf("/a") }] });
+    appendTabToGroup(saved.id, { title: "b", custom: false, key: "kb", layout: leaf("/b") });
+    appendTabToGroup(saved.id, { title: "b2", custom: false, key: "kb", layout: leaf("/b2") });
+    expect(loadGroups()[0].tabs.map((t) => t.title)).toEqual(["a", "b2"]);
+  });
+
+  it("missingGroupTabs returns only saved tabs that are not open", () => {
+    const { saved } = upsertGroup({
+      name: "G",
+      dir: "/",
+      tabs: ["a", "b", "c"].map((n) => ({ title: n, custom: false, key: `k${n}`, layout: leaf(`/${n}`) })),
+    });
+    expect(missingGroupTabs(saved, ["kb"]).map((t) => t.title)).toEqual(["a", "c"]);
+    expect(missingGroupTabs(saved, ["ka", "kb", "kc"])).toEqual([]);
+    expect(missingGroupTabs(saved, [])).toHaveLength(3);
+  });
+});
+
 describe("session", () => {
   it("persists open tabs and clamps activeIndex", () => {
     expect(loadSession()).toBeNull();
@@ -146,6 +180,7 @@ describe("session", () => {
     expect(loaded.collapsedGroups).toEqual(["g1"]);
     expect(loaded.tabs[0].groupId).toBe("g1");
     expect(loaded.tabs[0].groupName).toBe("Projeto");
+    expect(loaded.tabs[0].key).toBeUndefined();
     expect(loaded.tabs[1].groupId).toBeUndefined();
   });
 
