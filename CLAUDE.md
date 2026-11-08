@@ -133,7 +133,11 @@ O layout de cada aba é uma árvore binária/n-ária pura `Node<P>` onde cada n�
 6. **Agrupamento na seção "Terminais":**
    - O cabeçalho do grupo (na posição da primeira aba do grupo) mostra seta `▾`/`▸`, bolinha com o **status agregado** de todos os painéis do grupo (mesma prioridade de `tabStatus`), nome e número de terminais abertos.
    - Clicar no cabeçalho recolhe/expande o grupo (`collapsedGroups`, persistido na sessão). O `✕` do cabeçalho fecha todos os terminais do grupo (`closeGroupTabs`).
-7. **Exclusão de Grupo:** Excluir um grupo na seção **Grupos** mantém suas abas abertas, mas limpa `groupId`/`groupName` (`unlinkGroupTabs`). Ao restaurar a sessão, vínculos com grupos inexistentes também são descartados.
+7. **Arrastar abas para grupos (`startTabDrag` / `assignTabToGroup`):**
+   - Arrastar uma aba (`.item`) em **Terminais** por pelo menos `6px` (eventos de ponteiro; o drag & drop nativo do HTML5 é interceptado pelo WebView do Tauri) e soltar sobre um `.tab-group` (cabeçalho ou itens) a coloca naquele grupo, após o último membro (`moveIntoGroup`), expandindo o grupo.
+   - Ao **entrar** num grupo, a aba também é acrescentada ao grupo salvo (`appendTabToGroup`, com fallback `p.cwd || g.dir`). Ao **sair** (soltar na área livre de `#tabs`) ou ser movida para outro grupo, apenas o vínculo da sessão muda; o grupo salvo de origem não é alterado.
+   - Soltar no mesmo grupo (ou uma aba avulsa na área livre) não faz nada. O clique que segue o arraste é suprimido para não selecionar a aba.
+8. **Exclusão de Grupo:** Excluir um grupo na seção **Grupos** mantém suas abas abertas, mas limpa `groupId`/`groupName` (`unlinkGroupTabs`). Ao restaurar a sessão, vínculos com grupos inexistentes também são descartados.
 
 ### 4.5. Persistência de Sessão (`src/session.ts`)
 1. **Gatilhos de Gravação:** `persistSession()` é chamado sempre que abas ou painéis são criados, fechados, divididos, movidos, redimensionados, renomeados, quando a aba ativa muda ou quando um painel muda de diretório (`OSC 7`).

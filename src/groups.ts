@@ -46,6 +46,28 @@ export function saveGroup(group: Omit<Group, "id">): Group[] {
   return upsertGroup(group).groups;
 }
 
+/** Acrescenta uma aba ao grupo salvo (ex.: aba arrastada para o grupo na sidebar). */
+export function appendTabToGroup(id: string, tab: SavedTab): Group[] {
+  const groups = loadGroups();
+  const g = groups.find((g) => g.id === id);
+  if (!g) return groups;
+  g.tabs.push(tab);
+  persist(groups);
+  return groups;
+}
+
+/**
+ * Reordena a lista colocando `item` logo após o último membro de `groupId`
+ * (ou no fim, se o grupo não tiver membros ou `groupId` for indefinido).
+ */
+export function moveIntoGroup<T extends { groupId?: string }>(list: T[], item: T, groupId?: string): T[] {
+  const rest = list.filter((t) => t !== item);
+  let last = -1;
+  if (groupId) rest.forEach((t, i) => { if (t.groupId === groupId) last = i; });
+  if (last < 0) return [...rest, item];
+  return [...rest.slice(0, last + 1), item, ...rest.slice(last + 1)];
+}
+
 export function deleteGroup(id: string): Group[] {
   const groups = loadGroups().filter((g) => g.id !== id);
   persist(groups);

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { deleteGroup, loadGroups, saveGroup, upsertGroup } from "./groups";
+import { appendTabToGroup, deleteGroup, loadGroups, moveIntoGroup, saveGroup, upsertGroup } from "./groups";
 import { DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences } from "./preferences";
 import { clearSession, loadSession, saveSession } from "./session";
 
@@ -71,6 +71,34 @@ describe("groups", () => {
     expect(second.saved.id).toBe(first.saved.id);
     expect(second.saved.tabs).toHaveLength(2);
     expect(loadGroups()).toHaveLength(1);
+  });
+});
+
+type Item = { n: string; groupId?: string };
+
+describe("drag tabs into groups", () => {
+  it("moveIntoGroup places the item after the last member of the group", () => {
+    const a: Item = { n: "a", groupId: "g" }, b: Item = { n: "b" }, c: Item = { n: "c", groupId: "g" }, d: Item = { n: "d" };
+    const list = [a, b, c, d];
+    expect(moveIntoGroup(list, d, "g").map((t) => t.n)).toEqual(["a", "b", "c", "d"]);
+    expect(moveIntoGroup(list, b, "g").map((t) => t.n)).toEqual(["a", "c", "b", "d"]);
+    expect(list.map((t) => t.n)).toEqual(["a", "b", "c", "d"]); // não altera a lista original
+  });
+
+  it("moveIntoGroup moves the item to the end when leaving a group or the group is empty", () => {
+    const a: Item = { n: "a", groupId: "g" }, b: Item = { n: "b" };
+    expect(moveIntoGroup([a, b], a).map((t) => t.n)).toEqual(["b", "a"]);
+    expect(moveIntoGroup([a, b], b, "x").map((t) => t.n)).toEqual(["a", "b"]);
+  });
+
+  it("appendTabToGroup adds the tab keeping the id and ignores unknown ids", () => {
+    const tab = { title: "api", custom: false, layout: { kind: "leaf" as const, cwd: "/app/api" } };
+    const { saved } = upsertGroup({ name: "Projeto", dir: "/app", tabs: [tab] });
+    const groups = appendTabToGroup(saved.id, { ...tab, title: "web" });
+    expect(groups[0].id).toBe(saved.id);
+    expect(loadGroups()[0].tabs.map((t) => t.title)).toEqual(["api", "web"]);
+    expect(appendTabToGroup("nope", tab)).toEqual(loadGroups());
+    expect(loadGroups()[0].tabs).toHaveLength(2);
   });
 });
 

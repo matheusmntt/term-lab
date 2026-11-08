@@ -11,7 +11,7 @@ import {
   type Node, type Side, type SavedNode,
   leaves, without, insertBeside, swapLeaves, serialize, hydrate,
 } from "./layout";
-import { type Group, loadGroups, upsertGroup, deleteGroup } from "./groups";
+import { type Group, loadGroups, upsertGroup, deleteGroup, appendTabToGroup, moveIntoGroup } from "./groups";
 import {
   type CursorStyle, type Preferences,
   DEFAULT_PREFERENCES, clampFontSize, loadPreferences, savePreferences,
@@ -180,6 +180,7 @@ function renderSidebarTabs() {
       const collapsed = collapsedGroups.has(gid);
       const wrap = document.createElement("div");
       wrap.className = "tab-group";
+      wrap.dataset.groupId = gid;
       wrap.classList.toggle("collapsed", collapsed);
       const header = document.createElement("div");
       header.className = "item tab-group-header";
@@ -552,6 +553,7 @@ async function newTab(o: NewTabOpts = {}): Promise<Tab> {
   renderSidebarTabs();
   tabEl.onclick = () => select(tab);
   tabEl.ondblclick = () => startRename(tab);
+  tabEl.addEventListener("pointerdown", (e) => startTabDrag(tab, e));
   tabEl.querySelector(".x")!.addEventListener("click", (e) => { e.stopPropagation(); closeTab(tab); });
 
   select(tab);
@@ -611,6 +613,81 @@ function unlinkGroupTabs(groupId: string) {
     if (t.groupId === groupId) { t.groupId = undefined; t.groupName = undefined; }
   }
   collapsedGroups.delete(groupId);
+  renderSidebarTabs();
+  persistSession();
+}
+
+/**
+ * Arrastar uma aba na seção "Terminais": soltar sobre um grupo a coloca nele,
+ * soltar na área livre a torna avulsa. Usa eventos de ponteiro (como `startDrag`)
+ * porque o WebView do Tauri intercepta o drag & drop nativo do HTML5.
+ */
+function startTabDrag(tab: Tab, e: PointerEvent) {
+  if (e.button !== 0 || (e.target as HTMLElement).closest(".x, input")) return;
+  const sx = e.clientX, sy = e.clientY;
+  const r = tab.tabEl.getBoundingClientRect();
+  const ox = sx - r.left, oy = sy - r.top;
+  let dragging = false;
+  let ghost: HTMLElement | null = null;
+  let drop: { el: HTMLElement; groupId?: string } | null = null;
+  const setDrop = (next: typeof drop) => {
+    if (drop?.el !== next?.el) drop?.el.classList.remove("drop-target");
+    drop = next;
+    drop?.el.classList.add("drop-target");
+  };
+
+  const move = (ev: PointerEvent) => {
+    if (!dragging) {
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      dragging = true;
+      document.body.classList.add("dragging-tab");
+      tab.tabEl.classList.add("drag-src");
+      ghost = tab.tabEl.cloneNode(true) as HTMLElement;
+      ghost.className = "item tab-drag-ghost";
+      ghost.style.width = `${r.width}px`;
+      document.body.appendChild(ghost);
+    }
+    ghost!.style.left = `${ev.clientX - ox}px`;
+    ghost!.style.top = `${ev.clientY - oy}px`;
+    const under = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+    const groupEl = under?.closest<HTMLElement>(".tab-group");
+    let next: typeof drop = groupEl
+      ? { el: groupEl, groupId: groupEl.dataset.groupId }
+      : under && tabsEl.contains(under) ? { el: tabsEl } : null;
+    if (next && next.groupId === tab.groupId) next = null; // mesmo grupo (ou avulsa na área livre): nada muda
+    setDrop(next);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    if (!dragging) return;
+    ghost?.remove();
+    document.body.classList.remove("dragging-tab");
+    tab.tabEl.classList.remove("drag-src");
+    // o clique que segue o pointerup não deve selecionar a aba
+    const stop = (ce: Event) => ce.stopPropagation();
+    window.addEventListener("click", stop, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", stop, true), 0);
+    const target = drop;
+    setDrop(null);
+    if (target) assignTabToGroup(tab, target.groupId);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+/** Move a aba para um grupo (acrescentando-a ao grupo salvo) ou, sem `groupId`, a torna avulsa. */
+function assignTabToGroup(tab: Tab, groupId?: string) {
+  const g = groupId ? loadGroups().find((g) => g.id === groupId) : undefined;
+  if (groupId && !g) return;
+  tab.groupId = g?.id;
+  tab.groupName = g?.name;
+  tabs.splice(0, tabs.length, ...moveIntoGroup(tabs, tab, g?.id));
+  if (g && tab.root) {
+    collapsedGroups.delete(g.id);
+    appendTabToGroup(g.id, { title: tab.title, custom: tab.custom, layout: serialize(tab.root, (p) => p.cwd || g.dir) });
+    renderGroups();
+  }
   renderSidebarTabs();
   persistSession();
 }

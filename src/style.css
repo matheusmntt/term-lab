@@ -70,6 +70,17 @@ body.dragging * { user-select: none !important; }
   margin-left: 11px; padding-left: 8px; border-left: 1px solid var(--border);
 }
 .tab-group-items[hidden] { display: none; }
+/* Arrastar abas para dentro/fora de grupos */
+body.dragging-tab, body.dragging-tab * { cursor: grabbing !important; }
+.item.drag-src { opacity: .45; }
+.tab-drag-ghost {
+  position: fixed; z-index: 50; pointer-events: none; background: var(--sel);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); opacity: .9;
+}
+.tab-group.drop-target > .tab-group-header, #tabs.drop-target {
+  background: var(--sel); outline: 1px dashed var(--accent); outline-offset: -1px;
+}
+#tabs.drop-target { border-radius: 8px; }
 input.rename {
   flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--bg);
   border: 1px solid var(--accent); border-radius: 5px; padding: 1px 5px; outline: none; user-select: text;
