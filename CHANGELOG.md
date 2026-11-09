@@ -2,6 +2,21 @@
 
 Todas as mudanças relevantes deste projeto são documentadas neste arquivo, geradas automaticamente a partir de _Conventional Commits_.
 
+## [0.4.0](https://github.com/matheusmntt/term-lab/compare/v0.3.0...v0.4.0) (2026-11-09)
+
+
+### Features
+
+* **ui:** drag terminal tabs into and out of sidebar groups ([c3e0b85](https://github.com/matheusmntt/term-lab/commit/c3e0b853d14e458dcee79d5a62cf874a4d8ceb46))
+* **ui:** group terminal tabs by project group in sidebar ([9697a02](https://github.com/matheusmntt/term-lab/commit/9697a0205a6d2652fc6a6e880ece324597b9ee38))
+* **ui:** group terminal tabs by project group in sidebar ([d94c105](https://github.com/matheusmntt/term-lab/commit/d94c105f7b8bd07a278472b45093a998a5a00b1c))
+
+
+### Bug Fixes
+
+* **terminal:** keep opening remaining tabs when a shell fails to spawn ([8272764](https://github.com/matheusmntt/term-lab/commit/827276449a9ca2187fb32805b19dba141fc43225))
+* **ui:** open only missing saved tabs when reopening a group ([b8b14ea](https://github.com/matheusmntt/term-lab/commit/b8b14ea2995089b2b458b0e570c96e9562511a8a))
+
 ## [0.3.0](https://github.com/matheusmntt/term-lab/compare/v0.2.1...v0.3.0) (2026-10-30)
 
 
