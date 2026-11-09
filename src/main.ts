@@ -298,13 +298,20 @@ async function launch(p: Pane) {
   fitPane(p);
   p.ro = new ResizeObserver(() => fitPane(p));
   p.ro.observe(p.host);
-  await invoke("pty_spawn", {
-    id: p.id,
-    cols: p.term.cols,
-    rows: p.term.rows,
-    cwd: p.cwd || null,
-    shell: prefs.shell || null,
-  });
+  try {
+    await invoke("pty_spawn", {
+      id: p.id,
+      cols: p.term.cols,
+      rows: p.term.rows,
+      cwd: p.cwd || null,
+      shell: prefs.shell || null,
+    });
+  } catch (err) {
+    // uma falha ao iniciar um shell não pode interromper a abertura das demais abas (ex.: grupo)
+    console.error("pty_spawn falhou", err);
+    p.term.writeln(`\x1b[31mNão foi possível iniciar o shell: ${String(err)}\x1b[0m`);
+    setStatus(p, "error");
+  }
 }
 
 /**
